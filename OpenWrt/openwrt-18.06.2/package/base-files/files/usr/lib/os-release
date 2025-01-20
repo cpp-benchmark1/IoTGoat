@@ -1,0 +1,6 @@
+NAME="IoTGoat"
+VERSION="v1.0"
+ID="iotgoat"
+ID_LIKE="owasp iotgoat"
+PRETTY_NAME="OWASP IoTGoat"
+BUG_URL="https://github.com/OWASP/IoTGoat"
