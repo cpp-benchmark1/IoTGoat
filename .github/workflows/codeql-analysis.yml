@@ -39,10 +39,11 @@ jobs:
       shell: bash
       run: |
         cd OpenWrt/openwrt-18.06.2
+        export HOME=$(pwd)
+        sudo chmod +x scripts/*
         ./scripts/feeds update -a
         ./scripts/feeds install -a
-        make menuconfig
-        make
+        make config
     - name: Free disk space
       run: |
           sudo docker rmi $(docker image ls -aq) >/dev/null 2>&1 || true
