@@ -39,6 +39,9 @@ jobs:
       shell: bash
       run: |
         cd OpenWrt/openwrt-18.06.2
+        ./scripts/feeds update -a
+        ./scripts/feeds install -a
+        make menuconfig
         make
     - name: Free disk space
       run: |
