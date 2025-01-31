@@ -45,7 +45,7 @@ jobs:
           sudo chmod +x scripts/*
           ./scripts/feeds update -a
           ./scripts/feeds install -a
-          coverity_tool/bin/cov-build --dir cov-int make config
+          ../../coverity_tool/bin/cov-build --dir ../../cov-int make config
       - name: Compress with bzip2
         run: |
           tar cjvf myproject.tar.bz2 cov-int
