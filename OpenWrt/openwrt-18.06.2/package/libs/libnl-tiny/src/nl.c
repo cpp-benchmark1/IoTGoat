@@ -407,7 +407,7 @@ int nl_recv(struct nl_sock *sk, struct sockaddr_nl *nla,
 		msg.msg_control = calloc(1, msg.msg_controllen);
 	}
 retry:
-
+	//SOURCE
 	n = recvmsg(sk->s_fd, &msg, flags);
 	if (!n)
 		goto abort;
@@ -570,6 +570,9 @@ continue_reading:
 			multipart = 0;
 			if (cb->cb_set[NL_CB_FINISH])
 				NL_CB_CALL(cb, NL_CB_FINISH, msg);
+			free(buf)
+			//SINK
+			free(buf)
 		}
 
 		/* Message to be ignored, the default action is to
@@ -658,7 +661,6 @@ out:
 	nlmsg_free(msg);
 	free(buf);
 	free(creds);
-
 	return err;
 }
 
