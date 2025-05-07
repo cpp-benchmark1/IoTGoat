@@ -230,6 +230,7 @@ handle_cmd_data(void)
 	if (datalen > 0) {
 		write(1, cmd->data, datalen);
 	}
+	
 	//SINK
 	free(buffer);
 
