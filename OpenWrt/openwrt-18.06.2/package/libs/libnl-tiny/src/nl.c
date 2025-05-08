@@ -421,6 +421,8 @@ retry:
 		} else {
 			free(msg.msg_control);
 			free(*buf);
+			//SINK
+			free(msg.msg_control);
 			return -nl_syserr2nlerr(errno);
 		}
 	}
@@ -570,10 +572,6 @@ continue_reading:
 			multipart = 0;
 			if (cb->cb_set[NL_CB_FINISH])
 				NL_CB_CALL(cb, NL_CB_FINISH, msg);
-			free(buf)
-			
-			//SINK
-			free(buf)
 		}
 
 		/* Message to be ignored, the default action is to
