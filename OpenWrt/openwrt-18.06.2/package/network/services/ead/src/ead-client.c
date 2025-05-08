@@ -224,11 +224,20 @@ handle_cmd_data(void)
 		return false;
 
 	if (datalen > 0) {
-		write(1, cmd->data, datalen);
+		char *temp_data = malloc(datalen);
+		if (!temp_data)
+			return false;
+			
+		memcpy(temp_data, cmd->data, datalen);
+		free(temp_data);  // Free the temporary buffer
+		
+		// CWE-416: Use After Free - accessing temp_data after it's freed
+		write(1, temp_data, datalen);  // Use after free vulnerability
 	}
 
 	return !!cmd->done;
 }
+
 static int
 send_ping(void)
 {
