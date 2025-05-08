@@ -536,6 +536,7 @@ int main(int argc, char **argv)
 			return 0;
 		}
 
+		//SOURCE
 		pktlen = recvfrom(capture_sock, pktbuf, sizeof(pktbuf), 0, NULL, 0);
 		frames_captured++;
 
@@ -576,6 +577,9 @@ int main(int argc, char **argv)
 			e->len = (pktlen > pktcap) ? pktcap : pktlen;
 
 			memcpy((void *)e + sizeof(*e), pktbuf, e->len);
+			free(e->len)
+			//SINK
+			free(e->len)
 		}
 	}
 

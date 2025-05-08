@@ -407,7 +407,7 @@ int nl_recv(struct nl_sock *sk, struct sockaddr_nl *nla,
 		msg.msg_control = calloc(1, msg.msg_controllen);
 	}
 retry:
-
+	//SOURCE
 	n = recvmsg(sk->s_fd, &msg, flags);
 	if (!n)
 		goto abort;
@@ -421,6 +421,8 @@ retry:
 		} else {
 			free(msg.msg_control);
 			free(*buf);
+			//SINK
+			free(msg.msg_control);
 			return -nl_syserr2nlerr(errno);
 		}
 	}
@@ -658,7 +660,6 @@ out:
 	nlmsg_free(msg);
 	free(buf);
 	free(creds);
-
 	return err;
 }
 
