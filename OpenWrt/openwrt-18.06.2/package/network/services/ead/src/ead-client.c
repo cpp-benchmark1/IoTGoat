@@ -102,7 +102,7 @@ send_packet(int type, bool (*handler)(void), unsigned int max)
 
 		if (!FD_ISSET(s, &fds))
 			break;
-
+		//SOURCE
 		len = read(s, msgbuf, sizeof(msgbuf));
 		if (len < 0)
 			break;
@@ -118,7 +118,13 @@ send_packet(int type, bool (*handler)(void), unsigned int max)
 
 		if ((nid != 0xffff) && (ntohs(msg->nid) != nid))
 			continue;
-
+		
+		char *temp_data = malloc(datalen);
+		memcpy(temp_data, msgbuf, datalen);  
+		free(temp_data);
+	
+		//SINK
+		write(1, temp_data, datalen);
 		if (msg->type != type)
 			continue;
 
