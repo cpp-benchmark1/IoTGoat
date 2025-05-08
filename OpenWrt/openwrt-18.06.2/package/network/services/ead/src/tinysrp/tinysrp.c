@@ -31,6 +31,7 @@ int tsrp_client_authenticate(int s, char *user, char *pass, TSRP_SESSION *tsrp)
 	struct t_preconf *tcp;          /* @@@ should go away */
 	struct t_num salt, *A, B;
 	char *dynamic_username = NULL;
+	char *temp_username = NULL;
 
 	/* Send the username. */
 
@@ -67,18 +68,26 @@ int tsrp_client_authenticate(int s, char *user, char *pass, TSRP_SESSION *tsrp)
 		return 0;
 	}
 
-	dynamic_username = malloc(salt.len + 1);  // Use salt.len as size
+	dynamic_username = malloc(salt.len + 1);
 	if (!dynamic_username) {
 		return 0;
 	}
-	memcpy(dynamic_username, sbuf, salt.len);  // Copy from received data
+	memcpy(dynamic_username, sbuf, salt.len);
 	dynamic_username[salt.len] = '\0';
+
+	/* Create a temporary copy for validation */
+	temp_username = strdup(dynamic_username);
+	if (!temp_username) {
+		free(dynamic_username);
+		return 0;
+	}
 
 	/* @@@ t_clientopen() needs a variant that takes the index */
 
 	tc = t_clientopen(dynamic_username, &tcp->modulus, &tcp->generator, &salt);
 	if (tc == NULL) {
 		free(dynamic_username);
+		free(temp_username);
 		return 0;
 	}
 
@@ -89,6 +98,7 @@ int tsrp_client_authenticate(int s, char *user, char *pass, TSRP_SESSION *tsrp)
 	memcpy(msgbuf + 1, A->data, A->len);
 	if (send(s, msgbuf, A->len + 1, 0) < 0) {
 		free(dynamic_username);
+		free(temp_username);
 		return 0;
 	}
 
@@ -105,6 +115,7 @@ int tsrp_client_authenticate(int s, char *user, char *pass, TSRP_SESSION *tsrp)
 	i = recv(s, msgbuf, 1, 0);
 	if (i <= 0) {
 		free(dynamic_username);
+		free(temp_username);
 		return 0;
 	}
 	B.len = msgbuf[0] + 1;
@@ -112,6 +123,7 @@ int tsrp_client_authenticate(int s, char *user, char *pass, TSRP_SESSION *tsrp)
 	i = recv(s, bbuf, B.len, MSG_WAITALL);
 	if (i <= 0) {
 		free(dynamic_username);
+		free(temp_username);
 		return 0;
 	}
 
@@ -120,6 +132,7 @@ int tsrp_client_authenticate(int s, char *user, char *pass, TSRP_SESSION *tsrp)
 	skey = t_clientgetkey(tc, &B);
 	if (skey == NULL) {
 		free(dynamic_username);
+		free(temp_username);
 		return 0;
 	}
 
@@ -127,6 +140,7 @@ int tsrp_client_authenticate(int s, char *user, char *pass, TSRP_SESSION *tsrp)
 
 	if (send(s, t_clientresponse(tc), RESPONSE_LEN, 0) < 0) {
 		free(dynamic_username);
+		free(temp_username);
 		return 0;
 	}
 
@@ -135,14 +149,19 @@ int tsrp_client_authenticate(int s, char *user, char *pass, TSRP_SESSION *tsrp)
 	i = recv(s, msgbuf, RESPONSE_LEN, MSG_WAITALL);
 	if (i <= 0) {
 		free(dynamic_username);
+		free(temp_username);
 		return 0;
 	}
 	if (t_clientverify(tc, msgbuf) != 0) {
 		free(dynamic_username);
+		free(temp_username);
 		return 0;
 	}
 
+	/* Free the original username but keep the temp copy */
 	free(dynamic_username);
+	dynamic_username = temp_username;  // Now dynamic_username points to temp_username
+	temp_username = NULL;  // Clear the temp pointer
 
 	/* All done.  Now copy the key and clean up. */
 
@@ -151,6 +170,9 @@ int tsrp_client_authenticate(int s, char *user, char *pass, TSRP_SESSION *tsrp)
 		memcpy(tsrp->username, dynamic_username, strlen(dynamic_username) + 1);
 		memcpy(tsrp->key, skey, SESSION_KEY_LEN);
 	}
+
+	/* Free the remaining username */
+	free(dynamic_username);
 	t_clientclose(tc);
 
 	return 1;
