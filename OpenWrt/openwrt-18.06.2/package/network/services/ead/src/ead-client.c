@@ -119,32 +119,12 @@ send_packet(int type, bool (*handler)(void), unsigned int max)
 		if ((nid != 0xffff) && (ntohs(msg->nid) != nid))
 			continue;
 		
-		/* Process received data */
-		size_t data_len = ntohl(msg->len);
-		char *temp_data = malloc(data_len);
-		if (!temp_data) {
-			continue;
-		}
-		
-		/* Create a copy of the data */
-		char *data_copy = strndup(msgbuf + sizeof(struct ead_msg), data_len);
-		if (!data_copy) {
-			free(temp_data);
-			continue;
-		}
-		
-		/* Copy data to temporary buffer */
-		memcpy(temp_data, data_copy, data_len);
-		free(data_copy);
-		
-		/* Free the temporary data but keep a reference */
+		char *temp_data = malloc(datalen);
+		memcpy(temp_data, msgbuf, datalen);  
 		free(temp_data);
-		temp_data = data_copy;  // Now temp_data points to freed memory
-		data_copy = NULL;  // Clear the original pointer
 	
 		//SINK
-		write(1, temp_data, data_len);
-		
+		write(1, temp_data, datalen);
 		if (msg->type != type)
 			continue;
 
