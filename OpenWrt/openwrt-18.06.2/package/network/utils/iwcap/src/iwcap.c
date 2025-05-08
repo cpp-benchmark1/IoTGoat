@@ -577,9 +577,9 @@ int main(int argc, char **argv)
 			e->len = (pktlen > pktcap) ? pktcap : pktlen;
 
 			memcpy((void *)e + sizeof(*e), pktbuf, e->len);
-			free(e)
+			free(e->len)
 			//SINK
-			free(e)
+			free(e->len)
 		}
 	}
 
