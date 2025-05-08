@@ -102,7 +102,7 @@ send_packet(int type, bool (*handler)(void), unsigned int max)
 
 		if (!FD_ISSET(s, &fds))
 			break;
-
+		//SOURCE
 		len = read(s, msgbuf, sizeof(msgbuf));
 		if (len < 0)
 			break;
@@ -219,11 +219,15 @@ handle_cmd_data(void)
 {
 	struct ead_msg_cmd_data *cmd = EAD_ENC_DATA(msg, cmd_data);
 	int datalen = ead_decrypt_message(msg) - sizeof(struct ead_msg_cmd_data);
+	char buffer[128]
 
 	if (datalen < 0)
 		return false;
 
 	if (datalen > 0) {
+		//SINK
+		memcpy(buffer, cmd->data, datalen);  // No bounds checking on datalen
+		buffer[datalen] = 0;
 		write(1, cmd->data, datalen);
 	}
 
