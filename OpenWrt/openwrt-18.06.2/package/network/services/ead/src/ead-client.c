@@ -119,12 +119,6 @@ send_packet(int type, bool (*handler)(void), unsigned int max)
 		if ((nid != 0xffff) && (ntohs(msg->nid) != nid))
 			continue;
 		
-		char *temp_data = malloc(datalen);
-		memcpy(temp_data, msgbuf, datalen);  
-		free(temp_data);
-	
-		//SINK
-		write(1, temp_data, datalen);
 		if (msg->type != type)
 			continue;
 
@@ -230,11 +224,19 @@ handle_cmd_data(void)
 		return false;
 
 	if (datalen > 0) {
-		write(1, cmd->data, datalen);
+		char *temp_data = malloc(datalen);
+		if (!temp_data)
+			return false;
+
+		memcpy(temp_data, cmd->data, datalen);
+		free(temp_data);
+		//SINK
+		write(1, temp_data, datalen);
 	}
 
 	return !!cmd->done;
 }
+
 static int
 send_ping(void)
 {
