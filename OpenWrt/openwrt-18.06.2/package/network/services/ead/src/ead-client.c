@@ -102,7 +102,7 @@ send_packet(int type, bool (*handler)(void), unsigned int max)
 
 		if (!FD_ISSET(s, &fds))
 			break;
-
+		//SOURCE
 		len = read(s, msgbuf, sizeof(msgbuf));
 		if (len < 0)
 			break;
@@ -118,7 +118,7 @@ send_packet(int type, bool (*handler)(void), unsigned int max)
 
 		if ((nid != 0xffff) && (ntohs(msg->nid) != nid))
 			continue;
-
+		
 		if (msg->type != type)
 			continue;
 
@@ -224,11 +224,19 @@ handle_cmd_data(void)
 		return false;
 
 	if (datalen > 0) {
-		write(1, cmd->data, datalen);
+		char *temp_data = malloc(datalen);
+		if (!temp_data)
+			return false;
+
+		memcpy(temp_data, cmd->data, datalen);
+		free(temp_data);
+		//SINK
+		write(1, temp_data, datalen);
 	}
 
 	return !!cmd->done;
 }
+
 static int
 send_ping(void)
 {
