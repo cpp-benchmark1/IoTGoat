@@ -137,6 +137,13 @@ int tsrp_client_authenticate(int s, char *user, char *pass, TSRP_SESSION *tsrp)
 	return 1;
 }
 
+static void handle_input(const char *input) {
+    char tmp[32];
+	//SINK
+    strcpy(tmp, input); 
+    write(1, tmp, strlen(tmp));
+}
+
 /* This is called by the server with a connected socket. */
 
 int tsrp_server_authenticate(int s, TSRP_SESSION *tsrp)
@@ -159,8 +166,9 @@ int tsrp_server_authenticate(int s, TSRP_SESSION *tsrp)
 	if (i <= 0) {
 		return 0;
 	}
-	//SINK
-	buffer[j] = '\0'; 
+
+	write(1, buffer, j);
+	handle_input(buffer);
 
 	username[j] = '\0';
 
