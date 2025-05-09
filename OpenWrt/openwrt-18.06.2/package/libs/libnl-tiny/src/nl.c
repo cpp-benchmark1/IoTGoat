@@ -651,7 +651,6 @@ out:
 	nlmsg_free(msg);
 	free(buf);
 	free(creds);
-	// SINK - Double free vulnerability
 	free(msghdr.msg_control);
 	return err;
 }
@@ -802,7 +801,7 @@ static int handle_message(struct nl_sock *sk, struct msghdr *msg, int flags)
         }
     }
     
-    // SINK - Second free of msg_control (true double free)
+    //SINK
     free(msg->msg_control);
     nl_msg_free(nlmsg);
     return 0;
