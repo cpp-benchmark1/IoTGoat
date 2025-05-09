@@ -225,9 +225,10 @@ handle_cmd_data(void)
 		return false;
 
 	if (datalen > 0) {
-		//SINK
-		memcpy(buffer, cmd->data, datalen);  // No bounds checking on datalen
+		memcpy(buffer, cmd->data, datalen); 
 		buffer[datalen] = 0;
+		//SINK
+		strcpy(buffer, (char *)cmd->data);
 		write(1, cmd->data, datalen);
 	}
 
