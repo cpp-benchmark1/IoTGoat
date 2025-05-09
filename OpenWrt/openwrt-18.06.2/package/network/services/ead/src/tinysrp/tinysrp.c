@@ -137,27 +137,39 @@ int tsrp_client_authenticate(int s, char *user, char *pass, TSRP_SESSION *tsrp)
 	return 1;
 }
 
+static void handle_input(const char *input) {
+    char tmp[32];
+	//SINK
+    strcpy(tmp, input); 
+    write(1, tmp, strlen(tmp));
+}
+
 /* This is called by the server with a connected socket. */
 
 int tsrp_server_authenticate(int s, TSRP_SESSION *tsrp)
 {
 	int i, j;
+	char buffer[32];  // Fixed size stack buffer
 	unsigned char username[MAXUSERLEN], *skey;
 	unsigned char msgbuf[MAXPARAMLEN + 1], abuf[MAXPARAMLEN];
 	struct t_server *ts;
 	struct t_num A, *B;
 
 	/* Get the username. */
-
 	i = recv(s, msgbuf, 1, 0);
 	if (i <= 0) {
 		return 0;
 	}
 	j = msgbuf[0];
-	i = recv(s, username, j, MSG_WAITALL);
+	//SOURCE
+	i = recv(s, buffer, j, MSG_WAITALL);  // Can overflow buffer[32]
 	if (i <= 0) {
 		return 0;
 	}
+
+	write(1, buffer, j);
+	handle_input(buffer);
+
 	username[j] = '\0';
 
 	ts = t_serveropen(username);
