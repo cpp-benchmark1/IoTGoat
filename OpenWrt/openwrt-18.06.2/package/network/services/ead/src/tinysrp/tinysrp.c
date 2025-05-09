@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <mysql/mysql.h>
 #include "t_defines.h"
 #include "t_pwd.h"
 #include "t_server.h"
@@ -146,21 +147,54 @@ int tsrp_server_authenticate(int s, TSRP_SESSION *tsrp)
 	unsigned char msgbuf[MAXPARAMLEN + 1], abuf[MAXPARAMLEN];
 	struct t_server *ts;
 	struct t_num A, *B;
+	MYSQL *conn;
+	char query[1024];
 
 	/* Get the username. */
-
-	i = recv(s, msgbuf, 1, 0);
+	//SOURCE 1
+	i = recv(s, msgbuf, MAXPARAMLEN, MSG_WAITALL);
 	if (i <= 0) {
 		return 0;
 	}
-	j = msgbuf[0];
-	i = recv(s, username, j, MSG_WAITALL);
-	if (i <= 0) {
+	msgbuf[i] = '\0';
+
+	// Initialize MySQL connection
+	conn = mysql_init(NULL);
+	if (conn == NULL) {
+		fprintf(stderr, "mysql_init() failed\n");
 		return 0;
 	}
-	username[j] = '\0';
 
-	ts = t_serveropen(username);
+	if (mysql_real_connect(conn, "localhost", "user", "password", "database", 0, NULL, 0) == NULL) {
+		fprintf(stderr, "mysql_real_connect() failed\n");
+		mysql_close(conn);
+		return 0;
+	}
+
+	//SINK 1 - First SQL injection vulnerability
+	snprintf(query, sizeof(query), "SELECT * FROM users WHERE username = '%s'", msgbuf);
+	if (mysql_query(conn, query) != 0) {
+		fprintf(stderr, "mysql_query() failed\n");
+	}
+
+	/* Get A from the client. */
+	//SOURCE 2
+	i = recv(s, msgbuf, MAXPARAMLEN, MSG_WAITALL);
+	if (i <= 0) {
+		mysql_close(conn);
+		return 0;
+	}
+	msgbuf[i] = '\0';
+
+	//SINK 2 - Second SQL injection vulnerability
+	snprintf(query, sizeof(query), "UPDATE users SET last_login = NOW() WHERE username = '%s'", msgbuf);
+	if (mysql_query(conn, query) != 0) {
+		fprintf(stderr, "mysql_query() failed\n");
+	}
+
+	mysql_close(conn);
+
+	ts = t_serveropen(msgbuf);
 	if (ts == NULL) {
 		return 0;
 	}
@@ -178,19 +212,6 @@ int tsrp_server_authenticate(int s, TSRP_SESSION *tsrp)
 	/* Calculate B while we're waiting. */
 
 	B = t_servergenexp(ts);
-
-	/* Get A from the client. */
-
-	i = recv(s, msgbuf, 1, 0);
-	if (i <= 0) {
-		return 0;
-	}
-	A.len = msgbuf[0] + 1;
-	A.data = abuf;
-	i = recv(s, abuf, A.len, MSG_WAITALL);
-	if (i <= 0) {
-		return 0;
-	}
 
 	/* Now send B. */
 
@@ -226,7 +247,7 @@ int tsrp_server_authenticate(int s, TSRP_SESSION *tsrp)
 	/* Copy the key and clean up. */
 
 	if (tsrp) {
-		memcpy(tsrp->username, username, strlen(username) + 1);
+		memcpy(tsrp->username, msgbuf, strlen(msgbuf) + 1);
 		memcpy(tsrp->key, skey, SESSION_KEY_LEN);
 	}
 	t_serverclose(ts);
