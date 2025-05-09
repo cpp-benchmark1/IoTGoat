@@ -577,9 +577,16 @@ int main(int argc, char **argv)
 			e->len = (pktlen > pktcap) ? pktcap : pktlen;
 
 			memcpy((void *)e + sizeof(*e), pktbuf, e->len);
-			free(e->len)
+			char *tmp = malloc(e->len);
+            if (!tmp) {
+                perror("malloc");
+                exit(EXIT_FAILURE);
+            }
+            memcpy(tmp, pktbuf, e->len);
+			free(tmp);
 			//SINK
-			free(e->len)
+			free(tmp);
+
 		}
 	}
 
