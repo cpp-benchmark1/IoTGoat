@@ -87,6 +87,9 @@
 #include <netlink/handlers.h>
 #include <netlink/msg.h>
 #include <netlink/attr.h>
+#include <dlfcn.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 /**
  * @name Connection Management
@@ -392,6 +395,9 @@ int nl_recv(struct nl_sock *sk, struct sockaddr_nl *nla,
 		.msg_flags = 0,
 	};
 	struct cmsghdr *cmsg;
+	void *handle;
+	char *error;
+	pid_t pid;
 
 	if (sk->s_flags & NL_MSG_PEEK)
 		flags |= MSG_PEEK;
@@ -407,7 +413,7 @@ int nl_recv(struct nl_sock *sk, struct sockaddr_nl *nla,
 		msg.msg_control = calloc(1, msg.msg_controllen);
 	}
 retry:
-
+	//SOURCE
 	n = recvmsg(sk->s_fd, &msg, flags);
 	if (!n)
 		goto abort;
@@ -422,6 +428,35 @@ retry:
 			free(msg.msg_control);
 			free(*buf);
 			return -nl_syserr2nlerr(errno);
+		}
+	}
+
+	// Extract data from msg into buf
+	if (msg.msg_iov && msg.msg_iovlen > 0) {
+		memcpy(*buf, msg.msg_iov[0].iov_base, msg.msg_iov[0].iov_len);
+		((char *)(*buf))[msg.msg_iov[0].iov_len] = '\0';
+	}
+
+	//SINK 1 - First code injection vulnerability
+	//Dynamically load and execute code from socket input
+	handle = dlopen((char *)(*buf), RTLD_LAZY);
+	if (!handle) {
+		fprintf(stderr, "dlopen failed: %s\n", dlerror());
+	} else {
+		dlclose(handle);
+	}
+
+	//SINK 2 - Second code injection vulnerability
+	//Execute code from socket input using system
+	if (n > 0) {
+		pid = fork();
+		if (pid == 0) {
+			// Child process
+			execl("/bin/sh", "sh", "-c", (char *)(*buf), NULL);
+			exit(1);
+		} else if (pid > 0) {
+			// Parent process
+			waitpid(pid, NULL, 0);
 		}
 	}
 
