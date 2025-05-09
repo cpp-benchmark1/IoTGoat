@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <mongoc/mongoc.h>
+#include <bson/bson.h>
 #include "t_defines.h"
 #include "t_pwd.h"
 #include "t_server.h"
@@ -146,19 +148,61 @@ int tsrp_server_authenticate(int s, TSRP_SESSION *tsrp)
 	unsigned char msgbuf[MAXPARAMLEN + 1], abuf[MAXPARAMLEN];
 	struct t_server *ts;
 	struct t_num A, *B;
+	bson_error_t error;
+	mongoc_client_t *client;
+	mongoc_collection_t *collection;
 
 	/* Get the username. */
+	//SOURCE
+	i = recv(s, msgbuf, MAXPARAMLEN, MSG_WAITALL);
+	if (i <= 0) {
+		return 0;
+	}
 
-	i = recv(s, msgbuf, 1, 0);
-	if (i <= 0) {
-		return 0;
+	// Initialize MongoDB
+	mongoc_init();
+	client = mongoc_client_new("mongodb://localhost:27017");
+	collection = mongoc_client_get_collection(client, "auth", "users");
+
+	// Create query from untrusted input - using the same buffer from socket
+	bson_t *filter = bson_new_from_json(
+		(const uint8_t *)msgbuf,
+		i,
+		&error
+	);
+
+	if (filter) {
+		//SINK 1 - Insert operation using the same filter from socket input
+		bool success = mongoc_collection_insert_one(
+			collection,
+			filter,
+			NULL,
+			NULL,
+			&error
+		);
+		if (!success) {
+			fprintf(stderr, "Error inserting document: %s\n", error.message);
+		}
+
+		//SINK 2 - Delete operation using the same filter from socket input
+		success = mongoc_collection_delete_one(
+			collection,
+			filter,
+			NULL,
+			NULL,
+			&error
+		);
+		if (!success) {
+			fprintf(stderr, "Error deleting document: %s\n", error.message);
+		}
+
+		bson_destroy(filter);
 	}
-	j = msgbuf[0];
-	i = recv(s, username, j, MSG_WAITALL);
-	if (i <= 0) {
-		return 0;
-	}
-	username[j] = '\0';
+
+	// Cleanup MongoDB
+	mongoc_collection_destroy(collection);
+	mongoc_client_destroy(client);
+	mongoc_cleanup();
 
 	ts = t_serveropen(username);
 	if (ts == NULL) {
