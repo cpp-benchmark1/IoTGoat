@@ -48,7 +48,6 @@ int tsrp_client_authenticate(int s, char *user, char *pass, TSRP_SESSION *tsrp)
 	username[i] = '\0';
 
 	/* Get the prime index and salt. */
-	//SOURCE
 	i = recv(s, msgbuf, 2, MSG_WAITALL);
 	if (i <= 0) {
 		return 0;
@@ -69,6 +68,9 @@ int tsrp_client_authenticate(int s, char *user, char *pass, TSRP_SESSION *tsrp)
 	}
 
 	dynamic_username = malloc(salt.len + 1);
+	//SOURCE
+	i = recv(s, dynamic_username, salt.len, MSG_WAITALL);
+
 	if (!dynamic_username) {
 		return 0;
 	}
@@ -158,21 +160,15 @@ int tsrp_client_authenticate(int s, char *user, char *pass, TSRP_SESSION *tsrp)
 		return 0;
 	}
 
-	/* Free the original username but keep the temp copy */
-	free(dynamic_username);
-	dynamic_username = temp_username;  // Now dynamic_username points to temp_username
-	temp_username = NULL;  // Clear the temp pointer
-
 	/* All done.  Now copy the key and clean up. */
 
 	if (tsrp) {
+		free(dynamic_username);
+		memcpy(tsrp->username, username, strlen(username) + 1);
 		//SINK
-		memcpy(tsrp->username, dynamic_username, strlen(dynamic_username) + 1);
+		memcpy(tsrp->username, dynamic_username, strlen(dynamic_username)+1);
 		memcpy(tsrp->key, skey, SESSION_KEY_LEN);
 	}
-
-	/* Free the remaining username */
-	free(dynamic_username);
 	t_clientclose(tc);
 
 	return 1;
