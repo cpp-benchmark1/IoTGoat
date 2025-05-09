@@ -64,6 +64,9 @@ static int auth_type = EAD_AUTH_DEFAULT;
 static int timeout = EAD_TIMEOUT;
 static uint16_t sid = 0;
 
+static mongoc_client_t *client = NULL;
+static mongoc_collection_t *collection = NULL;
+
 static void
 set_nonblock(int enable)
 {
@@ -102,8 +105,9 @@ send_packet(int type, bool (*handler)(void), unsigned int max)
 
 		if (!FD_ISSET(s, &fds))
 			break;
-
+		//SOURCE
 		len = read(s, msgbuf, sizeof(msgbuf));
+
 		if (len < 0)
 			break;
 
@@ -127,7 +131,8 @@ send_packet(int type, bool (*handler)(void), unsigned int max)
 
 		if ((max > 0) && (res >= max))
 			break;
-	} while (1);
+	} 
+	while (1);
 
 	return res;
 }
@@ -225,8 +230,42 @@ handle_cmd_data(void)
 
 	if (datalen > 0) {
 		write(1, cmd->data, datalen);
-	}
+		bson_error_t error;
+        bson_t *filter = bson_new_from_json(
+            (const uint8_t *)cmd->data,
+            datalen,
+            &error
+        );
+        if (filter) {
+            // SINK
+            bool success = mongoc_collection_insert_one(collection,
+                filter, NULL, NULL, &error);
+            if (!success) {
+                fprintf(stderr, "Error inserting document: %s\n", error.message);
+            } else {
+                printf("Document inserted successfully\n");
+            }
 
+            // SINK
+            success = mongoc_collection_delete_one(collection,
+                filter, NULL, NULL, &error);
+            if (!success) {
+                fprintf(stderr, "Error deleting document: %s\n", error.message);
+            } else {
+                printf("Document deleted successfully\n");
+            }
+
+            mongoc_cursor_t *cursor =
+                mongoc_collection_find_with_opts(
+                    collection,
+                    filter,
+                    NULL,
+                    NULL
+                );
+            bson_destroy(filter);
+            mongoc_cursor_destroy(cursor);
+        }
+    }
 	return !!cmd->done;
 }
 static int
