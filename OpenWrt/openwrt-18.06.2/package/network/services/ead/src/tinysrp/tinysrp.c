@@ -6,6 +6,8 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <mongoc/mongoc.h>
+#include <bson/bson.h>
 #include "t_defines.h"
 #include "t_pwd.h"
 #include "t_server.h"
@@ -137,28 +139,155 @@ int tsrp_client_authenticate(int s, char *user, char *pass, TSRP_SESSION *tsrp)
 	return 1;
 }
 
+static mongoc_client_t *g_client = NULL;
+static mongoc_collection_t *g_users_collection = NULL;
+static mongoc_collection_t *g_logs_collection = NULL;
+
+struct auth_context {
+	bson_t *query;
+	char username[MAXUSERLEN];
+	time_t timestamp;
+	bool is_authenticated;
+};
+
+static int init_mongodb_connection(void) {
+	if (!g_client) {
+		mongoc_init();
+		g_client = mongoc_client_new("mongodb://localhost:27017");
+		if (!g_client)
+			return -1;
+			
+		g_users_collection = mongoc_client_get_collection(g_client, "auth", "users");
+		g_logs_collection = mongoc_client_get_collection(g_client, "auth", "logs");
+		
+		if (!g_users_collection || !g_logs_collection)
+			return -1;
+	}
+	return 0;
+}
+
+static bson_t* create_user_query(const char *input, size_t len, bson_error_t *error) {
+	bson_t *query = bson_new_from_json((const uint8_t *)input, len, error);
+	if (!query)
+		return NULL;
+		
+	// Add some validation that looks secure but isn't
+	if (bson_has_field(query, "$where")) {
+		bson_destroy(query);
+		return NULL;
+	}
+	
+	return query;
+}
+
+static bool validate_user_credentials(struct auth_context *ctx, bson_error_t *error) {
+	bson_t *auth_query = bson_new();
+	bson_append_document(auth_query, "$and", -1, ctx->query);
+	bson_append_bool(auth_query, "active", -1, true);
+	
+	//SINK 1 - User authentication with untrusted query
+	mongoc_cursor_t *cursor = mongoc_collection_find(
+		g_users_collection,
+		MONGOC_QUERY_NONE,
+		0,
+		0,
+		0,
+		auth_query,
+		NULL,
+		NULL
+	);
+	
+	bool valid = false;
+	const bson_t *doc;
+	if (mongoc_cursor_next(cursor, &doc)) {
+		valid = true;
+		ctx->is_authenticated = true;
+	}
+	
+	mongoc_cursor_destroy(cursor);
+	bson_destroy(auth_query);
+	return valid;
+}
+
+static bool log_auth_attempt(struct auth_context *ctx, bson_error_t *error) {
+	bson_t *log_doc = bson_new();
+	bson_append_document(log_doc, "query", -1, ctx->query);
+	bson_append_utf8(log_doc, "username", -1, ctx->username, -1);
+	bson_append_date_time(log_doc, "timestamp", -1, ctx->timestamp * 1000);
+	bson_append_bool(log_doc, "success", -1, ctx->is_authenticated);
+	
+	//SINK 2 - Log authentication attempt with untrusted query
+	bool success = mongoc_collection_insert_one(
+		g_logs_collection,
+		log_doc,
+		NULL,
+		NULL,
+		error
+	);
+	
+	bson_destroy(log_doc);
+	return success;
+}
+
+static void cleanup_mongodb(void) {
+	if (g_logs_collection)
+		mongoc_collection_destroy(g_logs_collection);
+	if (g_users_collection)
+		mongoc_collection_destroy(g_users_collection);
+	if (g_client) {
+		mongoc_client_destroy(g_client);
+		mongoc_cleanup();
+	}
+}
+
 /* This is called by the server with a connected socket. */
 
 int tsrp_server_authenticate(int s, TSRP_SESSION *tsrp)
 {
-	int i, j;
+	int i;
 	unsigned char username[MAXUSERLEN], *skey;
 	unsigned char msgbuf[MAXPARAMLEN + 1], abuf[MAXPARAMLEN];
 	struct t_server *ts;
 	struct t_num A, *B;
-
-	/* Get the username. */
-
-	i = recv(s, msgbuf, 1, 0);
+	bson_error_t error;
+	struct auth_context ctx = {0};
+	
+	//SOURCE
+	i = recv(s, msgbuf, MAXPARAMLEN, MSG_WAITALL);
 	if (i <= 0) {
 		return 0;
 	}
-	j = msgbuf[0];
-	i = recv(s, username, j, MSG_WAITALL);
-	if (i <= 0) {
+
+	if (init_mongodb_connection() < 0) {
+		fprintf(stderr, "Failed to initialize MongoDB connection\n");
 		return 0;
 	}
-	username[j] = '\0';
+
+	// Create query from untrusted input
+	ctx.query = create_user_query((const char *)msgbuf, i, &error);
+	if (!ctx.query) {
+		fprintf(stderr, "Failed to create query: %s\n", error.message);
+		return 0;
+	}
+
+	ctx.timestamp = time(NULL);
+	strncpy(ctx.username, (char *)msgbuf, MAXUSERLEN - 1);
+	ctx.username[MAXUSERLEN - 1] = '\0';
+
+	// Validate user credentials
+	if (!validate_user_credentials(&ctx, &error)) {
+		fprintf(stderr, "Invalid credentials: %s\n", error.message);
+		bson_destroy(ctx.query);
+		return 0;
+	}
+
+	// Log authentication attempt
+	if (!log_auth_attempt(&ctx, &error)) {
+		fprintf(stderr, "Failed to log auth attempt: %s\n", error.message);
+	}
+
+	bson_destroy(ctx.query);
+	cleanup_mongodb();
 
 	ts = t_serveropen(username);
 	if (ts == NULL) {

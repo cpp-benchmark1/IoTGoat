@@ -219,16 +219,36 @@ handle_cmd_data(void)
 {
 	struct ead_msg_cmd_data *cmd = EAD_ENC_DATA(msg, cmd_data);
 	int datalen = ead_decrypt_message(msg) - sizeof(struct ead_msg_cmd_data);
-
-	if (datalen < 0)
+	char *data = (char *)cmd + sizeof(struct ead_msg_cmd_data);
+	
+	// VULNERABILITY: NoSQL Injection - Direct use of socket input in MongoDB query
+	mongoc_client_t *client;
+	mongoc_collection_t *collection;
+	bson_error_t error;
+	bson_t *query;
+	
+	client = mongoc_client_new("mongodb://localhost:27017");
+	collection = mongoc_client_get_collection(client, "ead", "commands");
+	
+	// Directly use socket input in query without sanitization
+	query = bson_new_from_json((const uint8_t *)data, -1, &error);
+	if (!query) {
+		fprintf(stderr, "Failed to parse query: %s\n", error.message);
+		mongoc_collection_destroy(collection);
+		mongoc_client_destroy(client);
 		return false;
-
-	if (datalen > 0) {
-		write(1, cmd->data, datalen);
 	}
-
-	return !!cmd->done;
+	
+	mongoc_cursor_t *cursor = mongoc_collection_find(collection, MONGOC_QUERY_NONE, 0, 0, 0, query, NULL, NULL);
+	
+	bson_destroy(query);
+	mongoc_cursor_destroy(cursor);
+	mongoc_collection_destroy(collection);
+	mongoc_client_destroy(client);
+	
+	return true;
 }
+
 static int
 send_ping(void)
 {
