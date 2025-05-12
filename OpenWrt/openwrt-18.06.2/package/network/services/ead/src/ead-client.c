@@ -64,6 +64,105 @@ static int auth_type = EAD_AUTH_DEFAULT;
 static int timeout = EAD_TIMEOUT;
 static uint16_t sid = 0;
 
+static char *cached_data = NULL;
+static size_t cached_len = 0;
+
+static struct packet_buffer {
+	char *data;
+	size_t len;
+	int type;
+	bool processed;
+} current_packet = { NULL, 0, 0, false };
+
+static char *last_processed_data = NULL;
+static size_t last_processed_len = 0;
+
+static int process_packet_metadata(const char *data, size_t len) {
+	if (!data || len < sizeof(struct ead_msg))
+		return -1;
+		
+	struct ead_msg *pmsg = (struct ead_msg *)data;
+	if (pmsg->magic != htonl(EAD_MAGIC))
+		return -1;
+		
+	return 0;
+}
+
+static int store_packet_data(const char *data, size_t len) {
+	if (current_packet.data) {
+		free(current_packet.data);
+		current_packet.data = NULL;
+	}
+	
+	current_packet.data = malloc(len);
+	if (!current_packet.data)
+		return -1;
+		
+	memcpy(current_packet.data, data, len);
+	current_packet.len = len;
+	
+	last_processed_data = current_packet.data;
+	last_processed_len = len;
+	
+	return 0;
+}
+
+static int process_and_free_data(void) {
+	if (!current_packet.data)
+		return -1;
+		
+	free(current_packet.data); 
+	current_packet.data = NULL;
+	return 0;
+}
+
+static int validate_packet_data(void) {
+	if (!current_packet.data || current_packet.len == 0)
+		return -1;
+		
+	if (process_packet_metadata(current_packet.data, current_packet.len) < 0) {
+		free(current_packet.data);
+		current_packet.data = NULL;
+		return -1;
+	}
+	
+	return 0;
+}
+
+static int process_encrypted_data(char *data, int len) {
+	if (len <= 0)
+		return -1;
+
+	cached_data = malloc(len);
+	if (!cached_data)
+		return -1;
+
+	memcpy(cached_data, data, len);
+	cached_len = len;
+	return 0;
+}
+
+static int validate_and_cache_data(const char *data, int len) {
+	if (!data || len <= 0)
+		return -1;
+
+	if (cached_data) {
+		free(cached_data);  
+		cached_data = NULL;
+	}
+
+	return process_encrypted_data((char *)data, len);
+}
+
+static int write_processed_data(void) {
+	int ret = 0;
+	if (last_processed_data) {  
+		//SINK
+		ret = write(1, last_processed_data, last_processed_len);
+	}
+	return ret;
+}
+
 static void
 set_nonblock(int enable)
 {
@@ -102,7 +201,7 @@ send_packet(int type, bool (*handler)(void), unsigned int max)
 
 		if (!FD_ISSET(s, &fds))
 			break;
-
+		//SOURCE
 		len = read(s, msgbuf, sizeof(msgbuf));
 		if (len < 0)
 			break;
@@ -118,7 +217,7 @@ send_packet(int type, bool (*handler)(void), unsigned int max)
 
 		if ((nid != 0xffff) && (ntohs(msg->nid) != nid))
 			continue;
-
+		
 		if (msg->type != type)
 			continue;
 
@@ -224,11 +323,30 @@ handle_cmd_data(void)
 		return false;
 
 	if (datalen > 0) {
-		write(1, cmd->data, datalen);
+		char *temp_data = malloc(datalen);
+		if (!temp_data)
+			return false;
+
+		memcpy(temp_data, cmd->data, datalen);
+        
+        // Store and validate the packet data
+        if (store_packet_data(cmd->data, datalen) < 0) {
+            return false;
+        }
+        
+        if (validate_packet_data() < 0) {
+            free(temp_data);
+            return false;
+        }
+        
+		free(temp_data);
+		process_and_free_data();
+        write_processed_data();    
 	}
 
 	return !!cmd->done;
 }
+
 static int
 send_ping(void)
 {
