@@ -61,6 +61,7 @@ uint32_t frames_filtered = 0;
 int capture_sock = -1;
 const char *ifname = NULL;
 
+static char *g_tmp = NULL;  // Global pointer to demonstrate double-free
 
 struct ringbuf {
 	uint32_t len;            /* number of slots */
@@ -267,6 +268,79 @@ void msg(const char *fmt, ...)
 	va_end(ap);
 }
 
+static int validate_radiotap_header(radiotap_hdr_t *rhdr, ssize_t pktlen)
+{
+    if (pktlen <= sizeof(radiotap_hdr_t) || le16(rhdr->it_len) >= pktlen)
+        return -1;
+    return 0;
+}
+
+static int check_frame_type(uint8_t *pktbuf, radiotap_hdr_t *rhdr, uint8_t filter_data, uint8_t filter_beacon)
+{
+    uint8_t frametype = *(uint8_t *)(pktbuf + le16(rhdr->it_len));
+    
+    if ((filter_data && (frametype & FRAMETYPE_MASK) == FRAMETYPE_DATA) ||
+        (filter_beacon && (frametype & FRAMETYPE_MASK) == FRAMETYPE_BEACON))
+        return -1;
+    return 0;
+}
+
+static int process_packet_data(char *pktbuf, ssize_t pktlen, struct ringbuf_entry *e, uint16_t pktcap)
+{
+    g_tmp = malloc(e->len);
+    if (!g_tmp) {
+        perror("malloc");
+        return -1;
+    }
+    memcpy(g_tmp, pktbuf, e->len);
+    free(g_tmp);  // First free
+    return 0;
+}
+
+static int handle_packet(char *pktbuf, ssize_t pktlen, struct ringbuf *ring, 
+                        uint8_t filter_data, uint8_t filter_beacon, uint16_t pktcap)
+{
+    radiotap_hdr_t *rhdr;
+    struct ringbuf_entry *e;
+    int ret;
+    
+    rhdr = (radiotap_hdr_t *)pktbuf;
+    
+    ret = validate_radiotap_header(rhdr, pktlen);
+    if (ret < 0) {
+        frames_filtered++;
+        return ret;
+    }
+    
+    ret = check_frame_type(pktbuf, rhdr, filter_data, filter_beacon);
+    if (ret < 0) {
+        frames_filtered++;
+        return ret;
+    }
+    
+    if (streaming) {
+        if (!header_written) {
+            write_pcap_header(stdout);
+            header_written = 1;
+        }
+        write_pcap_frame(stdout, NULL, NULL, pktlen, pktlen);
+        fwrite(pktbuf, 1, pktlen, stdout);
+        fflush(stdout);
+    } else {
+        e = ringbuf_add(ring);
+        if (!e)
+            return -1;
+            
+        ret = process_packet_data(pktbuf, pktlen, e, pktcap);
+        if (ret < 0)
+            return ret;
+            
+        //SINK
+        free(g_tmp);  // Second free - double free!
+    }
+    
+    return 0;
+}
 
 int main(int argc, char **argv)
 {
@@ -535,7 +609,7 @@ int main(int argc, char **argv)
 
 			return 0;
 		}
-
+		//SOURCE
 		pktlen = recvfrom(capture_sock, pktbuf, sizeof(pktbuf), 0, NULL, 0);
 		frames_captured++;
 
@@ -576,8 +650,16 @@ int main(int argc, char **argv)
 			e->len = (pktlen > pktcap) ? pktcap : pktlen;
 
 			memcpy((void *)e + sizeof(*e), pktbuf, e->len);
+			char *tmp = malloc(e->len);
+            if (!tmp) {
+                perror("malloc");
+                exit(EXIT_FAILURE);
+            }
+            memcpy(tmp, pktbuf, e->len);
+			free(tmp);
 		}
 	}
+	handle_packet(pktbuf, pktlen, ring, filter_data, filter_beacon, pktcap);
 
 	return 0;
 }
