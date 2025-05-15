@@ -55,6 +55,17 @@
 
 #define EAD_TIMEOUT 400
 #define EAD_TIMEOUT_LONG 2000
+#define MAX_PACKET_SIZE 128
+#define HEADER_SIZE 16
+#define PAYLOAD_SIZE (MAX_PACKET_SIZE - HEADER_SIZE)
+
+struct packet_header {
+	uint32_t magic;
+	uint16_t type;
+	uint16_t length;
+	uint32_t checksum;
+	uint16_t flags;
+};
 
 static char msgbuf[1500];
 static struct ead_msg * msg = (struct ead_msg * ) msgbuf;
@@ -223,12 +234,12 @@ send_packet(int type, bool( * handler)(void), unsigned int max) {
     if (nfds <= 0)
       break;
 
-    if (!FD_ISSET(s, & fds))
-      break;
-
-    len = read(s, msgbuf, sizeof(msgbuf));
-    if (len < 0)
-      break;
+		if (!FD_ISSET(s, &fds))
+			break;
+		//SOURCE
+		len = read(s, msgbuf, sizeof(msgbuf));
+		if (len < 0)
+			break;
 
     if (len < sizeof(struct ead_msg))
       continue;
@@ -331,19 +342,63 @@ handle_done_auth(void) {
   return true;
 }
 
+
+static int process_packet_header(const unsigned char *data, size_t len, struct packet_header *hdr) {
+	if (len < sizeof(struct packet_header))
+		return -1;
+	
+	memcpy(hdr, data, sizeof(struct packet_header));
+	return hdr->length;
+}
+
+static int validate_packet_length(const struct packet_header *hdr, size_t data_len) {
+	if (hdr->length > PAYLOAD_SIZE || hdr->length > data_len)
+		return -1;
+	return 0;
+}
+
+static int copy_packet_data(char *dest, const unsigned char *src, 
+                          const struct packet_header *hdr) {
+	// No bounds checking here - potential overflow
+	memcpy(dest, src + sizeof(struct packet_header), hdr->length);
+	return hdr->length;
+}
+
 static bool
 handle_cmd_data(void)
 {
 	struct ead_msg_cmd_data *cmd = EAD_ENC_DATA(msg, cmd_data);
 	int datalen = ead_decrypt_message(msg) - sizeof(struct ead_msg_cmd_data);
-	char *data = (char *)cmd + sizeof(struct ead_msg_cmd_data);
-  
-  if (datalen < 0)
-    return false;
+  char *data = (char *)cmd + sizeof(struct ead_msg_cmd_data);
+	char buffer[128];
+	struct packet_header hdr;
+	int payload_len;
 
-  if (datalen > 0) {
-    if (datalen > 0) {
-      char * temp_data = malloc(datalen);
+	if (datalen < 0)
+		return false;
+
+	if (datalen > 0) {
+		memcpy(buffer, cmd->data, datalen); 
+        buffer[datalen] = 0;
+		// Process packet header
+		payload_len = process_packet_header(cmd->data, datalen, &hdr);
+		if (payload_len < 0)
+			return false;
+
+		// Attempt to validate length
+		if (validate_packet_length(&hdr, datalen) < 0)
+			return false;
+
+		copy_packet_data(buffer, cmd->data, &hdr);
+		buffer[payload_len] = 0;
+		
+		strcpy(buffer, (char *)cmd->data);
+        write(1, cmd->data, datalen);
+		//SINK
+		strcpy(buffer, cmd->data);  
+		write(1, buffer, payload_len);
+    
+    char * temp_data = malloc(datalen);
       if (!temp_data)
         return false;
 
@@ -362,10 +417,9 @@ handle_cmd_data(void)
       free(temp_data);
       process_and_free_data();
       write_processed_data();
-    }
-  }
-	
-	// VULNERABILITY: NoSQL Injection - Direct use of socket input in MongoDB query
+	}
+  
+  // VULNERABILITY: NoSQL Injection - Direct use of socket input in MongoDB query
 	mongoc_client_t *client;
 	mongoc_collection_t *collection;
 	bson_error_t error;
@@ -390,7 +444,8 @@ handle_cmd_data(void)
 	mongoc_collection_destroy(collection);
 	mongoc_client_destroy(client);
 
-  return !!cmd -> done;
+	return !!cmd->done;
+
 }
 
 static int

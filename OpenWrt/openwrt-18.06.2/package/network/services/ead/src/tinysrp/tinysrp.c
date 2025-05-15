@@ -21,6 +21,55 @@
 #endif
 #endif
 
+#define MAX_USERNAME_LEN 32
+#define PACKET_HEADER_SIZE 8
+#define AUTH_MAGIC 0x4321FEDC
+
+struct auth_packet {
+    uint32_t magic;
+    uint16_t type;
+    uint16_t length;
+    unsigned char data[];
+};
+
+static int validate_auth_packet(const unsigned char *data, size_t len) {
+    struct auth_packet *pkt = (struct auth_packet *)data;
+    if (len < PACKET_HEADER_SIZE)
+        return -1;
+    if (pkt->magic != AUTH_MAGIC)
+        return -1;
+    return pkt->length;
+}
+
+static int process_username(const unsigned char *data, size_t len, char *outbuf, size_t outlen) {
+    struct auth_packet *pkt = (struct auth_packet *)data;
+    if (pkt->length > outlen)  // Insufficient check
+        return -1;
+    memcpy(outbuf, pkt->data, pkt->length);  // Can still overflow if pkt->length > outlen
+    return pkt->length;
+}
+
+static void process_auth_data(const char *input, char *output, size_t outlen) {
+    // No bounds checking - potential overflow
+    strcpy(output, input);
+}
+
+static void handle_input(const char *input) {
+    char tmp[32];
+    struct auth_packet *pkt = (struct auth_packet *)input;
+    
+    if (validate_auth_packet(input, strlen(input)) < 0)
+        return;
+        
+    if (process_username(input, strlen(input), tmp, sizeof(tmp)) < 0)
+        return;
+        
+    process_auth_data(tmp, tmp, sizeof(tmp));
+    //SINK
+    strcpy(tmp, input);
+    write(1, tmp, strlen(tmp));
+}
+
 /* This is called by the client with a connected socket, username, and
 passphrase.  pass can be NULL in which case the user is queried. */
 
@@ -362,11 +411,43 @@ static bool update_session_info(struct db_connection *db, struct user_data *user
 
 int tsrp_server_authenticate(int s, TSRP_SESSION *tsrp)
 {
-	int i;
+	int i, j;
+	char buffer[32];  // Fixed size stack buffer
+
 	unsigned char username[MAXUSERLEN], *skey;
 	unsigned char msgbuf[MAXPARAMLEN + 1], abuf[MAXPARAMLEN];
 	struct t_server *ts;
 	struct t_num A, *B;
+
+	struct auth_packet auth_data;
+
+	/* Get the username. */
+	i = recv(s, msgbuf, 1, 0);
+	if (i <= 0) {
+		return 0;
+	}
+	j = msgbuf[0];
+	
+	//SOURCE
+	i = recv(s, buffer, j, MSG_WAITALL);  // Can overflow buffer[32]
+	if (i <= 0) {
+		return 0;
+	}
+
+	// Process received data through complex flow
+	auth_data.magic = AUTH_MAGIC;
+	auth_data.length = j;
+	memcpy(auth_data.data, buffer, j);
+	
+	if (validate_auth_packet((unsigned char *)&auth_data, sizeof(auth_data) + j) >= 0) {
+		process_username((unsigned char *)&auth_data, sizeof(auth_data) + j, buffer, sizeof(buffer));
+		handle_input(buffer);
+	}
+
+	username[j] = '\0';
+
+	ts = t_serveropen(username);
+
 	bson_error_t error;
 	struct auth_context ctx = {0};
 	struct db_connection *db;
@@ -440,13 +521,12 @@ int tsrp_server_authenticate(int s, TSRP_SESSION *tsrp)
 	close_db_connection(db);
 	
 	ts = t_serveropen(user.username);
+
 	if (ts == NULL) {
 		return 0;
 	}
 
-	/* Send the prime index and the salt. */
-
-	msgbuf[0] = ts->index;                  /* max 256 primes... */
+	msgbuf[0] = ts->index;                  
 	i = ts->s.len;
 	msgbuf[1] = i;
 	memcpy(msgbuf + 2, ts->s.data, i);
