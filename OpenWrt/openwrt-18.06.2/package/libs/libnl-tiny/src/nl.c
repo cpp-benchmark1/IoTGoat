@@ -8,7 +8,6 @@
  *
  * Copyright (c) 2003-2008 Thomas Graf <tgraf@suug.ch>
  */
-
 /**
  * @defgroup core Core
  *
@@ -80,7 +79,6 @@
  * 
  * @{
  */
-
  #include <netlink-local.h>
  #include <netlink/netlink.h>
  #include <netlink/utils.h>
@@ -90,12 +88,16 @@
  #include <dlfcn.h>
  #include <sys/types.h>
  #include <sys/wait.h>
- 
+ #include <sys/socket.h>  
+ #include <stdlib.h>
+ #include <errno.h>
+ #include <stdio.h>  
+ #include <dlfcn.h>
+ #include <unistd.h>
  /**
   * @name Connection Management
   * @{
   */
- 
  /**
   * Create and connect netlink socket.
   * @arg sk		Netlink socket.
@@ -110,13 +112,11 @@
  {
 	 int err;
 	 socklen_t addrlen;
- 
 	 sk->s_fd = socket(AF_NETLINK, SOCK_RAW, protocol);
 	 if (sk->s_fd < 0) {
 		 err = -nl_syserr2nlerr(errno);
 		 goto errout;
 	 }
- 
 	 if (!(sk->s_flags & NL_SOCK_BUFSIZE_SET)) {
 		 err = nl_socket_set_buffer_size(sk, 0, 0);
 		 if (err < 0)
