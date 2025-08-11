@@ -296,3 +296,46 @@ char* udp_server_msg() {
     }
     return result;
 }
+
+int create_tcp_socket() {
+    return socket(AF_INET, SOCK_STREAM, 0);
+}
+
+void bind_tcp_socket(int sockfd, int port, struct sockaddr_in *server_addr) {
+    memset(server_addr, 0, sizeof(*server_addr));
+    server_addr->sin_family = AF_INET;
+    server_addr->sin_addr.s_addr = htonl(INADDR_ANY);
+    server_addr->sin_port = htons(port);
+    bind(sockfd, (struct sockaddr *)server_addr, sizeof(*server_addr));
+}
+
+int receive_tcp_data(int client_sock, char *buffer) {
+    return recv(client_sock, buffer, 1024, 0);
+}
+
+char* tcp_server_msg() {
+    int sockfd = create_tcp_socket();
+    struct sockaddr_in server_addr, client_addr;
+    char buffer[1024] = {0};
+
+    bind_tcp_socket(sockfd, 9999, &server_addr);
+    listen(sockfd, 5);
+
+    socklen_t client_len = sizeof(client_addr);
+    int client_sock = accept(sockfd, (struct sockaddr *)&client_addr, &client_len);
+    int len = receive_tcp_data(client_sock, buffer);
+
+    close(client_sock);
+    close(sockfd);
+
+    if (len <= 0) return NULL;
+
+    char *result = malloc(len + 1);
+
+    if (!result) return NULL;
+
+    memcpy(result, buffer, len);
+    result[len] = '\0';
+
+    return result;
+}
