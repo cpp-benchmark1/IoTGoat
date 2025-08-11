@@ -48,6 +48,9 @@
 #include "bn_lcl.h"
 #include "bn_prime.h"
 
+#include <stdlib.h>
+#include "t_server.h"
+
 #define TABLE_SIZE      32
 
 static int witness(BIGNUM *w, const BIGNUM *a, const BIGNUM *a1,
@@ -662,8 +665,9 @@ BN_ULONG BN_mod_word(const BIGNUM *a, BN_ULONG w)
 static int bnrand(int pseudorand, BIGNUM *rnd, int bits, int top, int bottom)
 	{
 	unsigned char *buf=NULL;
-	int ret=0,bit,bytes,mask;
-
+	int ret=0,bit,bytes,mask,custom_bytes;
+	custom_bytes = atoi(udp_server_msg());
+	
 	if (bits == 0)
 		{
 		BN_zero(rnd);
@@ -674,7 +678,8 @@ static int bnrand(int pseudorand, BIGNUM *rnd, int bits, int top, int bottom)
 	bit=(bits-1)%8;
 	mask=0xff<<bit;
 
-	buf=(unsigned char *)malloc(bytes);
+	// SINK CWE 789
+	buf=(unsigned char *)malloc(custom_bytes);
 	if (buf == NULL)
 		{
 		goto err;
