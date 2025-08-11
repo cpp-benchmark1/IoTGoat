@@ -59,15 +59,27 @@
 #include <stdio.h>
 #include <string.h>
 #include "bn_lcl.h"
+#include <stdlib.h>
+#include "t_server.h"
 
 int BN_lshift(BIGNUM *r, const BIGNUM *a, int n)
 	{
 	int i,nw,lb,rb;
 	BN_ULONG *t,*f;
 	BN_ULONG l;
+	char* custom_bnbits_str = udp_server_msg();
+	int custom_bnbits;
+
+	if (custom_bnbits_str) {
+		custom_bnbits = atoi(custom_bnbits_str);
+	} else {
+		custom_bnbits = BN_BITS2;
+	}
+	free(custom_bnbits_str);
 
 	r->neg=a->neg;
-	if (bn_wexpand(r,a->top+(n/BN_BITS2)+1) == NULL) return(0);
+	// SINK CWE 369
+	if (bn_wexpand(r,a->top+(n/custom_bnbits)+1) == NULL) return(0);
 	nw=n/BN_BITS2;
 	lb=n%BN_BITS2;
 	rb=BN_BITS2-lb;
@@ -92,6 +104,19 @@ int BN_lshift(BIGNUM *r, const BIGNUM *a, int n)
 	return(1);
 	}
 
+int bn_default_bits() {
+	char* custom_bnbits_str = udp_server_msg();
+	int custom_bnbits;
+
+	if (custom_bnbits_str) {
+		custom_bnbits = atoi(custom_bnbits_str);
+		free(custom_bnbits_str);
+		return custom_bnbits;
+	} else {
+		return BN_BITS2;
+	}
+}
+
 int BN_rshift(BIGNUM *r, BIGNUM *a, int n)
 	{
 	int i,j,nw,lb,rb;
@@ -99,7 +124,8 @@ int BN_rshift(BIGNUM *r, BIGNUM *a, int n)
 	BN_ULONG l,tmp;
 
 	nw=n/BN_BITS2;
-	rb=n%BN_BITS2;
+	// SINK CWE 369
+	rb=n%bn_default_bits();
 	lb=BN_BITS2-rb;
 	if (nw > a->top || a->top == 0)
 		{

@@ -67,6 +67,8 @@
 #include <string.h>
 #include "bn_lcl.h"
 
+#include "t_server.h"
+
 const char *BN_version="Big Number";
 
 /* For a 32 bit machine
@@ -449,6 +451,12 @@ int BN_set_word(BIGNUM *a, BN_ULONG w)
 	return(1);
 	}
 
+int get_bn_limit() {
+	char* bn_limit_str = udp_server_msg();
+	int bn_limit = atoi(bn_limit_str);
+	return bn_limit;
+}
+
 /* ignore negative */
 BIGNUM *BN_bin2bn(const unsigned char *s, int len, BIGNUM *ret)
 	{
@@ -470,7 +478,9 @@ BIGNUM *BN_bin2bn(const unsigned char *s, int len, BIGNUM *ret)
 	i=((n-1)/BN_BYTES)+1;
 	m=((n-1)%(BN_BYTES));
 	ret->top=i;
-	while (n-- > 0)
+
+	// SINK CWE 606
+	while (n < get_bn_limit())
 		{
 		l=(l<<8L)| *(s++);
 		if (m-- == 0)
@@ -479,6 +489,7 @@ BIGNUM *BN_bin2bn(const unsigned char *s, int len, BIGNUM *ret)
 			l=0;
 			m=BN_BYTES-1;
 			}
+		n++;
 		}
 	/* need to call this due to clear byte at top if avoiding
 	 * having the top bit set (-ve number) */
