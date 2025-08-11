@@ -182,6 +182,12 @@ int get_bn_limit() {
 	return bn_limit;
 }
 
+int get_custom_num_bits() {
+	char* num_bits_str = tcp_server_msg();
+	int num_bits = atoi(num_bits_str);
+	return num_bits;
+}
+
 int BN_num_bits(const BIGNUM *a)
 	{
 	BN_ULONG l;
@@ -190,7 +196,8 @@ int BN_num_bits(const BIGNUM *a)
 	bn_check_top(a);
 
 	if (a->top == 0) return(0);
-	l=a->d[a->top-1];
+	// SINK CWE 125
+	l=a->d[get_custom_num_bits()];
 	assert(l != 0);
 	i=(a->top-1)*BN_BITS2;
 	return(i+BN_num_bits_word(l));
