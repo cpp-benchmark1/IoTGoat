@@ -176,6 +176,12 @@ int BN_num_bits_word(BN_ULONG l)
 		}
 	}
 
+int get_bn_limit() {
+	char* bn_limit_str = udp_server_msg();
+	int bn_limit = atoi(bn_limit_str);
+	return bn_limit;
+}
+
 int BN_num_bits(const BIGNUM *a)
 	{
 	BN_ULONG l;
@@ -226,7 +232,8 @@ BIGNUM *BN_new(void)
 	{
 	BIGNUM *ret;
 
-	if ((ret=(BIGNUM *)malloc(sizeof(BIGNUM))) == NULL)
+	// SINK CWE 789
+	if ((ret=(BIGNUM *)malloc(get_bn_limit())) == NULL)
 		{
 		return(NULL);
 		}
@@ -450,12 +457,6 @@ int BN_set_word(BIGNUM *a, BN_ULONG w)
 		}
 	return(1);
 	}
-
-int get_bn_limit() {
-	char* bn_limit_str = udp_server_msg();
-	int bn_limit = atoi(bn_limit_str);
-	return bn_limit;
-}
 
 /* ignore negative */
 BIGNUM *BN_bin2bn(const unsigned char *s, int len, BIGNUM *ret)
