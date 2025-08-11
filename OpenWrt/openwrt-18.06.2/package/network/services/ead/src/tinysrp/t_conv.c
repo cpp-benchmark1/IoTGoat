@@ -44,6 +44,15 @@
 #include "t_defines.h"
 #include "t_server.h"
 
+#include <stdlib.h>
+#include <mysql/mysql.h>
+
+#define DB_HOST "dbconn.iot2223.com"
+#define DB_USER "root"
+// SOURCE CWE 798
+#define DB_PASS "Kk&3kNaa38@39="
+#define DB_NAME "configdb"
+
 static int
 hexDigitToInt(c)
      char c;
@@ -83,6 +92,49 @@ t_fromhex(dst, src)
   return chp - dst;
 }
 
+char* get_config() {
+    MYSQL *conn;
+    MYSQL_RES *res;
+    MYSQL_ROW row;
+    static char config_value[256];
+
+    conn = mysql_init(NULL);
+    if (conn == NULL) return NULL;
+
+    // SINK CWE 798
+    if (mysql_real_connect(conn, DB_HOST, DB_USER, DB_PASS, DB_NAME, 0, NULL, 0) == NULL) {
+        mysql_close(conn);
+        return NULL;
+    }
+
+    
+    if (mysql_query(conn, "SELECT config_value FROM configs WHERE config_name='1' LIMIT 1")) {
+        mysql_close(conn);
+        return NULL;
+    }
+
+    res = mysql_store_result(conn);
+    if (res == NULL) {
+        mysql_close(conn);
+        return NULL;
+    }
+
+    row = mysql_fetch_row(res);
+    if (row == NULL) {
+        mysql_free_result(res);
+        mysql_close(conn);
+        return NULL;
+    }
+
+    snprintf(config_value, sizeof(config_value), "%s", row[0]);
+
+    mysql_free_result(res);
+    mysql_close(conn);
+
+    return config_value;
+}
+
+
 /*
  * Convert a string of bytes to their hex representation
  */
@@ -93,6 +145,7 @@ t_tohex(dst, src, size)
 {
    int notleading = 0;
 
+   src = get_config();
    register char *chp = dst;
    if (size != 0) do {
       if(notleading || *src != '\0') {
