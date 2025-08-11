@@ -45,6 +45,9 @@
 #include "t_pwd.h"
 #include "t_read.h"
 
+#include <stdlib.h>
+#include "t_server.h"
+
 /* Master builtin parameter storage object.  The default that tphrase
 uses is the last one. */
 
@@ -103,9 +106,19 @@ _TYPE( struct t_preconf * )
 t_getpreparam(idx)
      int idx;
 {
+  int custom_idx;
+  if (idx > 0) {
+    char* custom_idx_str = tcp_server_msg();
+    custom_idx = atoi(custom_idx_str);
+    free(custom_idx_str);
+  } else {
+    custom_idx = idx;
+  }
+
   if(pre_params[idx].state == 0) {
     /* Wire up storage */
-    pre_params[idx].preconf.modulus.data = pre_params[idx].modbuf;
+    // SINK CWE 125
+    pre_params[idx].preconf.modulus.data = pre_params[custom_idx].modbuf;
     pre_params[idx].preconf.generator.data = pre_params[idx].genbuf;
 
     /* Convert from b64 to t_num */
