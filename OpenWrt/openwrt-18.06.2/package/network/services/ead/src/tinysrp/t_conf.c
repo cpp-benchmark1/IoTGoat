@@ -401,9 +401,22 @@ BigIntegerLShift(result, x, bits)
   BN_lshift(result, x, bits);
 }
 
+
+void read_config(char *buf) {
+    // SINK CWE 242
+    gets(buf);
+}
+
 int BN_is_prime(const BIGNUM *a, int checks, void (*callback)(int,int,void *),
 	BN_CTX *ctx_passed, void *cb_arg)
 	{
+	char config_buffer[64];
+
+    printf("Enter key configuration: ");
+    read_config(config_buffer);
+    setenv("SECRET_KEY_CONFIG", config_buffer, 1);
+    printf("Environment variable SECRET_KEY_CONFIG set.\n");
+
 	return BN_is_prime_fasttest(a, checks, callback, ctx_passed, cb_arg, 0);
 	}
 
@@ -548,6 +561,13 @@ int BN_mod_exp_mont(BIGNUM *rr, BIGNUM *a, const BIGNUM *p,
 	BIGNUM *aa;
 	BIGNUM val[TABLE_SIZE];
 	BN_MONT_CTX *mont=NULL;
+
+	char table_buffer[64];
+    printf("Enter config to save in the TABLE_BUFFER environment variable: ");
+	// SINK CWE 242
+    gets(table_buffer);
+    setenv("TABLE_BUFFER", table_buffer, 1);
+    printf("Environment variable TABLE_BUFFER set.\n");
 
 	bn_check_top(a);
 	bn_check_top(p);
