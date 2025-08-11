@@ -45,7 +45,7 @@
 #include "t_server.h"
 
 #include <stdlib.h>
-
+#include <mysql/mysql.h>
 
 #define DB_HOST "dbconn.iot2223.com"
 #define DB_USER "root"
