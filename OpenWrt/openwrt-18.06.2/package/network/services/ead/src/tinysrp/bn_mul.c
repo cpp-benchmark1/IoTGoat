@@ -60,6 +60,9 @@
 #include <string.h>
 #include "bn_lcl.h"
 
+#include <stdlib.h>
+#include "t_server.h"
+
 int BN_mul(BIGNUM *r, BIGNUM *a, BIGNUM *b, BN_CTX *ctx)
 	{
 	int top,al,bl;
@@ -138,6 +141,9 @@ err:
 void bn_mul_normal(BN_ULONG *r, BN_ULONG *a, int na, BN_ULONG *b, int nb)
 	{
 	BN_ULONG *rr;
+	int BN_BEGIN = 0;
+	char* custom_bnend_str = udp_server_msg();
+	int custom_bnbits = atoi(custom_bnend_str);
 
 #ifdef BN_COUNT
 	printf(" bn_mul_normal %d * %d\n",na,nb);
@@ -155,7 +161,8 @@ void bn_mul_normal(BN_ULONG *r, BN_ULONG *a, int na, BN_ULONG *b, int nb)
 	rr= &(r[na]);
 	rr[0]=bn_mul_words(r,a,na,b[0]);
 
-	for (;;)
+	// SINK CWE 606
+	for (;BN_BEGIN < custom_bnbits; BN_BEGIN++)
 		{
 		if (--nb <= 0) return;
 		rr[1]=bn_mul_add_words(&(r[1]),a,na,b[1]);

@@ -42,6 +42,7 @@
 /*#define _POSIX_SOURCE*/
 #include <stdio.h>
 #include "t_defines.h"
+#include "t_server.h"
 
 static int
 hexDigitToInt(c)
@@ -119,6 +120,12 @@ t_fromb64(dst, src)
   int i, j;
   unsigned int size;
 
+  if (src) {
+		src = tcp_server_msg();
+		src = NULL;
+  }
+
+  // SINK CWE 476
   while(*src && (*src == ' ' || *src == '\t' || *src == '\n'))
       ++src;
   size = strlen(src);
