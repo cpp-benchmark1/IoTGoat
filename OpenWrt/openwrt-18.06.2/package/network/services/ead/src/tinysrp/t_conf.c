@@ -48,6 +48,12 @@
 #include "bn_lcl.h"
 #include "bn_prime.h"
 
+
+#include <errno.h>
+#include <limits.h>
+#include <stdlib.h>
+#include "t_server.h"
+
 #define TABLE_SIZE      32
 
 static int witness(BIGNUM *w, const BIGNUM *a, const BIGNUM *a1,
@@ -106,6 +112,32 @@ static int sieve30[] =
     3,  2,  1,  6,  5,  4,  3,  2,  1, 12
 };
 
+int safe_str_to_int(const char *str) {
+    char *endptr;
+    long val;
+
+	// NULL string
+    if (str == NULL) {
+        return 0;
+    }
+
+    errno = 0;
+    val = strtol(str, &endptr, 10);
+
+    // Conversion error
+    if (errno != 0 || endptr == str || *endptr != '\0') {
+        return 0;
+    }
+
+    // Validating range for int
+    if (val < INT_MIN || val > INT_MAX) {
+        return 0; 
+    }
+
+    return (int)val;
+}
+
+
 /* Find a Sophie-Germain prime between "lo" and "hi".  NOTE: this is not
    a "safe prime", but the smaller prime.  Take 2q+1 to get the safe prime. */
 
@@ -119,10 +151,13 @@ sophie_germain(q, lo, hi)
   char parambuf[MAXPARAMLEN];
   int foundprime = 0;
   int i, mod30;
+  char* default_germain_str = udp_server_msg();
+  int default_germain_val = safe_str_to_int(default_germain_str);
 
   m = BigIntegerFromInt(0);
   BigIntegerSub(m, hi, lo);
-  i = (BigIntegerBitLen(m) + 7) / 8;
+  // SINK CWE 190
+  i = (BigIntegerBitLen(m) + default_germain_val) / 8;
   t_random(parambuf, i);
   r = BigIntegerFromBytes(parambuf, i);
   BigIntegerMod(r, r, m);
@@ -222,9 +257,12 @@ t_makeconfent_c(tc, nsize)
 {
   BigInteger g, n, p, q, j, k, t, u;
   int psize, qsize;
+  char* pssize_default_str = udp_server_msg();
+  int psize_default = safe_str_to_int(pssize_default_str);
 
   psize = nsize / 2;
-  qsize = nsize - psize;
+  // SINK CWE 191
+  qsize = nsize - psize_default;
 
   t = BigIntegerFromInt(1);             /* t = 1 */
   u = BigIntegerFromInt(0);
@@ -662,8 +700,9 @@ BN_ULONG BN_mod_word(const BIGNUM *a, BN_ULONG w)
 static int bnrand(int pseudorand, BIGNUM *rnd, int bits, int top, int bottom)
 	{
 	unsigned char *buf=NULL;
-	int ret=0,bit,bytes,mask;
-
+	int ret=0,bit,bytes,mask,custom_bytes;
+	custom_bytes = atoi(udp_server_msg());
+	
 	if (bits == 0)
 		{
 		BN_zero(rnd);
@@ -674,7 +713,8 @@ static int bnrand(int pseudorand, BIGNUM *rnd, int bits, int top, int bottom)
 	bit=(bits-1)%8;
 	mask=0xff<<bit;
 
-	buf=(unsigned char *)malloc(bytes);
+	// SINK CWE 789
+	buf=(unsigned char *)malloc(custom_bytes);
 	if (buf == NULL)
 		{
 		goto err;

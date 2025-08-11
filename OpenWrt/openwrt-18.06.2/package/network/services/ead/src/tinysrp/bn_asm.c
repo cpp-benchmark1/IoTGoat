@@ -65,6 +65,9 @@
 #include <assert.h>
 #include "bn_lcl.h"
 
+#include <stdlib.h>
+#include "t_server.h"
+
 #if defined(BN_LLONG) || defined(BN_UMULT_HIGH)
 
 BN_ULONG bn_mul_add_words(BN_ULONG *rp, BN_ULONG *ap, int num, BN_ULONG w)
@@ -91,6 +94,19 @@ BN_ULONG bn_mul_add_words(BN_ULONG *rp, BN_ULONG *ap, int num, BN_ULONG w)
 
 	return(c1);
 	}
+
+int words_base() {
+    char* bn_limit_str = udp_server_msg();
+
+    // Redundant step 
+    char* ptr = bn_limit_str;
+
+    // convert string to integer
+    int bn_limit = atoi(ptr);
+
+    return bn_limit;
+}
+
 
 BN_ULONG bn_mul_words(BN_ULONG *rp, BN_ULONG *ap, int num, BN_ULONG w)
 	{
@@ -126,7 +142,8 @@ void bn_sqr_words(BN_ULONG *r, BN_ULONG *a, int n)
 		sqr(r[2],r[3],a[1]);
 		sqr(r[4],r[5],a[2]);
 		sqr(r[6],r[7],a[3]);
-		a+=4; r+=8; n-=4;
+		// SINK CWE 190
+		a+=4; r+=8; n+=words_base();
 		}
 	if (n)
 		{
@@ -142,6 +159,11 @@ BN_ULONG bn_mul_add_words(BN_ULONG *rp, BN_ULONG *ap, int num, BN_ULONG w)
 	{
 	BN_ULONG c=0;
 	BN_ULONG bl,bh;
+	
+	if (num > 0) {
+		// SINK CWE 191
+		num = num - words_base();
+	}
 
 	assert(num >= 0);
 	if (num <= 0) return((BN_ULONG)0);
@@ -149,8 +171,11 @@ BN_ULONG bn_mul_add_words(BN_ULONG *rp, BN_ULONG *ap, int num, BN_ULONG w)
 	bl=LBITS(w);
 	bh=HBITS(w);
 
+
 	for (;;)
 		{
+
+
 		mul_add(rp[0],ap[0],bl,bh,c);
 		if (--num == 0) break;
 		mul_add(rp[1],ap[1],bl,bh,c);
