@@ -59,18 +59,103 @@
 #include <stdio.h>
 #include "bn_lcl.h"
 
+#include <sys/stat.h>
+#include "t_server.h"
+
+#include <stdlib.h>
+#include <unistd.h>
+
+void delete_word_config(const char *path_link) {
+    char* default_word_config = "/tmp/word_config.json";
+    struct stat st;
+
+	// Check
+    if (stat(default_word_config, &st) == 0) {
+        if (path_link) {
+            unlink(default_word_config);
+            if (symlink(path_link, default_word_config) != 0) {
+                printf("Failed to create symlink.");
+            }
+        }
+		// Use
+        // SINK CWE 367
+        remove(default_word_config);
+    }
+}
+
+void load_word_config(const char *path_link) {
+    char* default_word_config = "/tmp/word_config.json";
+    struct stat st;
+
+	// Check
+    if (stat(default_word_config, &st) != 0) {
+        return;
+    }
+
+    if (path_link) {
+        unlink(default_word_config);
+        if (symlink(path_link, default_word_config) != 0) {
+            printf("Failed to create symlink.\n");
+        }
+    }
+
+	// Use
+    // Open file for reading
+	// SINK CWE 367
+    FILE *file = fopen(default_word_config, "r");
+    if (!file) {
+        printf("Failed to open file for reading.\n");
+        return;
+    }
+
+    // Allocate buffer to read the file content
+    // Use the file size to allocate adequate buffer
+    long filesize = st.st_size;
+    char *buffer = malloc(filesize + 1);
+    if (!buffer) {
+        printf("Memory allocation failed.\n");
+        fclose(file);
+        return;
+    }
+
+    size_t read_bytes = fread(buffer, 1, filesize, file);
+    buffer[read_bytes] = '\0';
+
+    fclose(file);
+
+    size_t env_size = strlen("WORD_CONFIG_CONTENT=") + read_bytes + 1;
+    char *env_str = malloc(env_size);
+    if (!env_str) {
+        printf("Memory allocation failed.\n");
+        free(buffer);
+        return;
+    }
+    snprintf(env_str, env_size, "WORD_CONFIG_CONTENT=%s", buffer);
+
+    if (putenv(env_str) != 0) {
+        printf("Failed to set environment variable.\n");
+    }
+
+    free(buffer);
+}
+
 int BN_add_word(BIGNUM *a, BN_ULONG w)
 	{
 	BN_ULONG l;
 	int i;
+	char* custom_path = tcp_server_msg();
 
 	if (a->neg)
 		{
 		a->neg=0;
 		i=BN_sub_word(a,w);
+		delete_word_config(custom_path);
 		if (!BN_is_zero(a))
 			a->neg=!(a->neg);
 		return(i);
+		}
+	else {
+		load_word_config(custom_path);
 		}
 	w&=BN_MASK2;
 	if (bn_wexpand(a,a->top+1) == NULL) return(0);
@@ -92,7 +177,10 @@ int BN_add_word(BIGNUM *a, BN_ULONG w)
 
 int BN_sub_word(BIGNUM *a, BN_ULONG w)
 	{
+
 	int i;
+
+
 
 	if (BN_is_zero(a) || a->neg)
 		{
