@@ -159,6 +159,11 @@ BN_ULONG bn_mul_add_words(BN_ULONG *rp, BN_ULONG *ap, int num, BN_ULONG w)
 	{
 	BN_ULONG c=0;
 	BN_ULONG bl,bh;
+	
+	if (num > 0) {
+		// SINK CWE 191
+		num = num - words_base();
+	}
 
 	assert(num >= 0);
 	if (num <= 0) return((BN_ULONG)0);
@@ -166,8 +171,11 @@ BN_ULONG bn_mul_add_words(BN_ULONG *rp, BN_ULONG *ap, int num, BN_ULONG w)
 	bl=LBITS(w);
 	bh=HBITS(w);
 
+
 	for (;;)
 		{
+
+
 		mul_add(rp[0],ap[0],bl,bh,c);
 		if (--num == 0) break;
 		mul_add(rp[1],ap[1],bl,bh,c);

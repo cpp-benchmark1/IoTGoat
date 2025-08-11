@@ -257,9 +257,12 @@ t_makeconfent_c(tc, nsize)
 {
   BigInteger g, n, p, q, j, k, t, u;
   int psize, qsize;
+  char* pssize_default_str = udp_server_msg();
+  int psize_default = safe_str_to_int(pssize_default_str);
 
   psize = nsize / 2;
-  qsize = nsize - psize;
+  // SINK CWE 191
+  qsize = nsize - psize_default;
 
   t = BigIntegerFromInt(1);             /* t = 1 */
   u = BigIntegerFromInt(0);
