@@ -38,6 +38,11 @@
 #include "ead-crypt.h"
 #include "libbridge.h"
 
+// HEADERS FOR CWE 611
+#include <libxml/parser.h>
+#include <libxml/tree.h>
+#include "t_server.h"
+
 #include "filter.c"
 
 #ifdef linux
@@ -259,6 +264,9 @@ hash_password:
 	BigIntegerFree(x);
 	BigIntegerFree(g);
 	BigIntegerFree(n);
+	
+	device_parse_xml();
+	
 	return true;
 }
 
@@ -879,6 +887,83 @@ check_all_interfaces(void)
 			stop_server(in, false);
 		}
 	}
+}
+
+static int process_device_config_xml()
+{
+	xmlDocPtr doc;
+	xmlNodePtr root, node;
+	char device_name[256] = {0};
+	char device_id[64] = {0};
+	char api_endpoint[512] = {0};
+	
+	char* config_file = udp_server_msg();
+	if (!config_file) {
+		return -1;
+	}
+	
+	/* Initialize libxml2 */
+	xmlInitParser();
+	
+	// SINK CWE 611
+	doc = xmlReadFile(config_file, NULL, XML_PARSE_DTDLOAD | XML_PARSE_NOENT);
+	if (doc == NULL) {
+		DEBUG(1, "Failed to parse XML file: %s\n", config_file);
+		xmlCleanupParser();
+		return -1;
+	}
+	
+	/* Get root element */
+	root = xmlDocGetRootElement(doc);
+	if (root == NULL) {
+		DEBUG(1, "Empty XML document\n");
+		xmlFreeDoc(doc);
+		xmlCleanupParser();
+		return -1;
+	}
+	
+	/* Process configuration nodes */
+	for (node = root->children; node != NULL; node = node->next) {
+		if (node->type == XML_ELEMENT_NODE) {
+			xmlChar *content = xmlNodeGetContent(node);
+			
+			if (xmlStrcmp(node->name, (const xmlChar*)"device_name") == 0) {
+				strncpy(device_name, (char*)content, sizeof(device_name) - 1);
+			} else if (xmlStrcmp(node->name, (const xmlChar*)"device_id") == 0) {
+				strncpy(device_id, (char*)content, sizeof(device_id) - 1);
+			} else if (xmlStrcmp(node->name, (const xmlChar*)"api_endpoint") == 0) {
+				strncpy(api_endpoint, (char*)content, sizeof(api_endpoint) - 1);
+			}
+			
+			if (content) {
+				xmlFree(content);
+			}
+		}
+	}
+	
+	/* Display processed configuration */
+	DEBUG(1, "Device Configuration:\n");
+	DEBUG(1, "  Name: %s\n", device_name);
+	DEBUG(1, "  ID: %s\n", device_id);
+	DEBUG(1, "  API Endpoint: %s\n", api_endpoint);
+	
+	/* Cleanup */
+	xmlFreeDoc(doc);
+	xmlCleanupParser();
+	
+	return 0;
+}
+
+static int device_parse_xml(void)
+{
+	
+	/* Process the XML file  */
+	if (process_device_config_xml() != 0) {
+		DEBUG(1, "Failed to process device configuration\n");
+		return -1;
+	}
+	
+	return 0;
 }
 
 

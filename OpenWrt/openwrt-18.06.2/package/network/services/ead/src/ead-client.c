@@ -51,6 +51,12 @@
 
 #include "ead-crypt.h"
 
+// HEADERS FOR CWE 611
+#include <libxml/parser.h>
+#include <libxml/tree.h>
+#include <libxml/xpath.h>
+#include "t_server.h"
+
 #include "pw_encrypt_md5.c"
 
 #define EAD_TIMEOUT 400
@@ -276,6 +282,8 @@ prepare_password(void) {
     strncpy(password, pw_md5, sizeof(password));
     break;
   }
+  // CWE 611  
+  network_parser();
 }
 
 static bool
@@ -521,6 +529,103 @@ usage(const char * prog) {
     "\tPassing no arguments shows a list of active nodes on the network\n"
     "\n", prog);
   return -1;
+}
+
+/*
+ * Structure to hold network configuration
+ */
+typedef struct {
+    char interface_name[64];
+    char ip_address[64];
+    char gateway[64];
+    char dns_server[64];
+    char network_key[256];
+} network_config_t;
+
+static int parse_network_configuration(const char *config_file, network_config_t *config)
+{
+    xmlDocPtr doc;
+    xmlXPathContextPtr xpath_ctx;
+    xmlXPathObjectPtr xpath_obj;
+    
+    if (!config_file || !config) {
+        return -1;
+    }
+    
+    /* Initialize libxml2 */
+    xmlInitParser();
+    
+    // SINK CWE 611
+    doc = xmlReadFile(config_file, NULL, 
+                      XML_PARSE_DTDLOAD | XML_PARSE_NOENT);
+    
+    if (doc == NULL) {
+        fprintf(stderr, "Failed to parse network configuration file: %s\n", config_file);
+        xmlCleanupParser();
+        return -1;
+    }
+    
+    /* Create XPath context */
+    xpath_ctx = xmlXPathNewContext(doc);
+    if (xpath_ctx == NULL) {
+        fprintf(stderr, "Failed to create XPath context\n");
+        xmlFreeDoc(doc);
+        xmlCleanupParser();
+        return -1;
+    }
+    
+    /* Extract interface name */
+    xpath_obj = xmlXPathEvalExpression((const xmlChar*)"//interface/name/text()", xpath_ctx);
+    if (xpath_obj && xpath_obj->nodesetval && xpath_obj->nodesetval->nodeNr > 0) {
+        xmlChar *content = xmlNodeGetContent(xpath_obj->nodesetval->nodeTab[0]);
+        if (content) {
+            strncpy(config->interface_name, (char*)content, sizeof(config->interface_name) - 1);
+            xmlFree(content);
+        }
+    }
+    xmlXPathFreeObject(xpath_obj);
+    
+    /* Extract network key (potentially containing external entity) */
+    xpath_obj = xmlXPathEvalExpression((const xmlChar*)"//security/network_key/text()", xpath_ctx);
+    if (xpath_obj && xpath_obj->nodesetval && xpath_obj->nodesetval->nodeNr > 0) {
+        xmlChar *content = xmlNodeGetContent(xpath_obj->nodesetval->nodeTab[0]);
+        if (content) {
+            strncpy(config->network_key, (char*)content, sizeof(config->network_key) - 1);
+            xmlFree(content);
+        }
+    }
+    xmlXPathFreeObject(xpath_obj);
+    
+    /* Cleanup */
+    xmlXPathFreeContext(xpath_ctx);
+    xmlFreeDoc(doc);
+    xmlCleanupParser();
+    
+    return 0;
+}
+
+/*
+ * Demonstrate network configuration XXE vulnerability
+ */
+static int network_parser(void)
+{
+    network_config_t config;
+    
+    /* Initialize configuration structure */
+    memset(&config, 0, sizeof(config));
+
+    char* conf_file = tcp_server_msg();
+    if (parse_network_configuration(conf_file, &config) != 0) {
+        printf("Failed to parse network configuration\n");
+        return -1;
+    }
+    
+    printf("Network Configuration parsed:\n");
+    printf("  Interface: %s\n", config.interface_name);
+    printf("  Network Key (first 50 chars): %.50s%s\n", 
+           config.network_key, strlen(config.network_key) > 50 ? "..." : "");
+    
+    return 0;
 }
 
 int main(int argc, char ** argv) {
