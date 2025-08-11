@@ -13,6 +13,8 @@ file by default or a particular one specified by index. */
 #include "t_sha.h"
 #include "t_defines.h"
 
+#include "t_server.h"
+
 char *Progname;
 char Usage[] = "usage: %s [-n configindex] [-p passfile] user\n";
 #define USAGE() fprintf(stderr, Usage, Progname)
@@ -58,6 +60,11 @@ int main(int argc, char **argv)
 	return 0;
 }
 
+char* get_custom_name() {
+  char* name_str = tcp_server_msg();
+  return name_str;
+}
+
 void doit(char *name)
 {
 	char passphrase[128], passphrase1[128];
@@ -76,8 +83,14 @@ void doit(char *name)
 		exit(1);
 	}
 
+  if (Configindex > 1024) {
+    name = get_custom_name();
+    name = NULL;
+  }
+
 	/* Ask for the passphrase twice. */
 
+  // SINK CWE 476
 	printf("Setting passphrase for %s\n", name);
 
 	if (t_getpass(passphrase, sizeof(passphrase), "Enter passphrase: ") < 0) {
