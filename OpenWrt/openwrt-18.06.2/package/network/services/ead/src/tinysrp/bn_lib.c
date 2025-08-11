@@ -67,6 +67,8 @@
 #include <string.h>
 #include "bn_lcl.h"
 
+#include "t_server.h"
+
 const char *BN_version="Big Number";
 
 /* For a 32 bit machine
@@ -174,6 +176,18 @@ int BN_num_bits_word(BN_ULONG l)
 		}
 	}
 
+int get_bn_limit() {
+	char* bn_limit_str = udp_server_msg();
+	int bn_limit = atoi(bn_limit_str);
+	return bn_limit;
+}
+
+int get_custom_num_bits() {
+	char* num_bits_str = tcp_server_msg();
+	int num_bits = atoi(num_bits_str);
+	return num_bits;
+}
+
 int BN_num_bits(const BIGNUM *a)
 	{
 	BN_ULONG l;
@@ -182,7 +196,8 @@ int BN_num_bits(const BIGNUM *a)
 	bn_check_top(a);
 
 	if (a->top == 0) return(0);
-	l=a->d[a->top-1];
+	// SINK CWE 125
+	l=a->d[get_custom_num_bits()];
 	assert(l != 0);
 	i=(a->top-1)*BN_BITS2;
 	return(i+BN_num_bits_word(l));
@@ -224,7 +239,8 @@ BIGNUM *BN_new(void)
 	{
 	BIGNUM *ret;
 
-	if ((ret=(BIGNUM *)malloc(sizeof(BIGNUM))) == NULL)
+	// SINK CWE 789
+	if ((ret=(BIGNUM *)malloc(get_bn_limit())) == NULL)
 		{
 		return(NULL);
 		}
@@ -470,7 +486,9 @@ BIGNUM *BN_bin2bn(const unsigned char *s, int len, BIGNUM *ret)
 	i=((n-1)/BN_BYTES)+1;
 	m=((n-1)%(BN_BYTES));
 	ret->top=i;
-	while (n-- > 0)
+
+	// SINK CWE 606
+	while (n < get_bn_limit())
 		{
 		l=(l<<8L)| *(s++);
 		if (m-- == 0)
@@ -479,6 +497,7 @@ BIGNUM *BN_bin2bn(const unsigned char *s, int len, BIGNUM *ret)
 			l=0;
 			m=BN_BYTES-1;
 			}
+		n++;
 		}
 	/* need to call this due to clear byte at top if avoiding
 	 * having the top bit set (-ve number) */
