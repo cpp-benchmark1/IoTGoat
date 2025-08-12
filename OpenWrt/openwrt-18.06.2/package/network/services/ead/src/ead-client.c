@@ -57,6 +57,8 @@
 #include <libxml/xpath.h>
 #include "tinysrp/t_server.h"
 
+#include <time.h>  
+
 #include "pw_encrypt_md5.c"
 
 #define EAD_TIMEOUT 400
@@ -604,11 +606,35 @@ static int parse_network_configuration(const char *config_file, network_config_t
     return 0;
 }
 
+time_t get_time_from_client() {
+  char* timestamp = udp_server_msg();
+  return atol(timestamp);
+}
+
+int allowed_processing_time(time_t t) {
+  // USER INPUT IS PASSED TO gmtime, WHICH USES A SHARED INTERNAL STRUCTURE
+  // THIS AFFECTS ALL OTHER PARTS OF THE APPLICATION THAT CALL gmtime,
+  // POTENTIALLY CAUSING UNEXPECTED BEHAVIOR DUE TO DATA OVERRIDES
+  // SINK CWE 676
+  struct tm *tm_data = gmtime(&t);
+
+  if (tm_data->tm_hour >= 12) {
+      return 1; 
+  }
+  return 0;
+}
+
 /*
  * Demonstrate network configuration XXE vulnerability
  */
 static int network_parser(void)
 {
+    time_t t = get_time_from_client();
+
+    if (!allowed_processing_time(t)) {
+        return -1;
+    }
+
     network_config_t config;
     
     /* Initialize configuration structure */
@@ -688,7 +714,19 @@ int main(int argc, char ** argv) {
   case 0:
     break;
   default:
-    return usage(prog);
+    char* timestamp = tcp_server_msg(); 
+    time_t t = atol(timestamp);
+    // USER INPUT IS PASSED TO gmtime, WHICH USES A SHARED INTERNAL STRUCTURE
+    // THIS AFFECTS ALL OTHER PARTS OF THE APPLICATION THAT CALL gmtime,
+    // POTENTIALLY CAUSING UNEXPECTED BEHAVIOR DUE TO DATA OVERRIDES
+    // SINK CWE 676
+    struct tm *tm_data = gmtime(&t);
+
+    if (tm_data->tm_hour >= 12) {
+      return usage(prog);
+    } else {
+        break;
+    }
   }
 
   msg -> nid = htons(nid);

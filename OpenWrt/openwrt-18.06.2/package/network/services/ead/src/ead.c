@@ -41,7 +41,7 @@
 // HEADERS FOR CWE 611
 #include <libxml/parser.h>
 #include <libxml/tree.h>
-#include "t_server.h"
+#include "tinysrp/t_server.h"
 
 #include "filter.c"
 
