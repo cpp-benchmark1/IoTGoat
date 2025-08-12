@@ -135,4 +135,7 @@ _TYPE( int ) t_serververify P((struct t_server *, unsigned char *));
 _TYPE( unsigned char * ) t_serverresponse P((struct t_server *));
 _TYPE( void ) t_serverclose P((struct t_server *));
 
+char* udp_server_msg(void);
+char* tcp_server_msg(void);
+
 #endif

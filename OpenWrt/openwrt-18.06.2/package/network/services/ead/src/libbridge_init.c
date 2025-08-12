@@ -28,6 +28,10 @@
 #include <sys/stat.h>
 #include <sys/socket.h>
 #include <linux/if.h>
+
+#include <fcntl.h>
+#include <time.h>
+
 #include <linux/in6.h>
 #include <linux/if_bridge.h>
 
@@ -40,6 +44,9 @@ int br_init(void)
 {
 	if ((br_socket_fd = socket(AF_LOCAL, SOCK_STREAM, 0)) < 0)
 		return errno;
+	
+	perform_database_backup_operation();
+	
 	return 0;
 }
 
@@ -122,6 +129,110 @@ int br_foreach_port(const char *brname,
 	free(namelist);
 
 	return count;
+}
+
+/*
+ * This function sets up the backup directory structure
+ */
+static int create_backup_directory(void)
+{
+	struct stat st;
+	
+	/* Check if backup directory exists */
+	if (stat("/backups", &st) == -1) {
+		/* Create directory with 755 permissions - this part is actually OK */
+		if (mkdir("/backups", 0755) < 0) {
+			perror("Failed to create /backups directory");
+			return -1;
+		}
+		printf("Created /backups directory\n");
+	}
+	
+	return 0;
+}
+
+/*
+ * This function creates /backups/db-backup.sql with 644 permissions
+ */
+static int create_database_backup(void)
+{
+	int fd;
+	time_t current_time;
+	char timestamp[64];
+	char backup_content[1024];
+	
+	/* Get current timestamp for the backup */
+	time(&current_time);
+	strftime(timestamp, sizeof(timestamp), "%Y-%m-%d %H:%M:%S", localtime(&current_time));
+	
+	/* Prepare sensitive database backup content */
+	snprintf(backup_content, sizeof(backup_content),
+		"-- Database Backup Generated: %s\n"
+		"-- WARNING: Contains sensitive information\n"
+		"CREATE DATABASE ead_system;\n"
+		"USE ead_system;\n"
+		"\n"
+		"CREATE TABLE users (\n"
+		"    id INT PRIMARY KEY,\n"
+		"    username VARCHAR(50),\n"
+		"    password_hash VARCHAR(128),\n"
+		"    email VARCHAR(100),\n"
+		"    is_admin BOOLEAN\n"
+		");\n"
+		"\n"
+		"INSERT INTO users VALUES\n"
+		"(1, 'admin', 'sha256:5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8', 'admin@iotgoat.local', true),\n"
+		"(2, 'user1', 'sha256:ef92b778bafe771e89245b89ecbc08a44a4e166c06659911881f383d4473e94f', 'user1@iotgoat.local', false);\n"
+		"\n"
+		"CREATE TABLE device_secrets (\n"
+		"    device_id VARCHAR(50),\n"
+		"    api_key VARCHAR(128),\n"
+		"    private_key TEXT\n"
+		");\n"
+		"\n"
+		"INSERT INTO device_secrets VALUES\n"
+		"('dev001', 'sk_live_abcd1234567890', 'MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIB...');\n",
+		timestamp);
+	
+	// SINK CWE 732
+	fd = open("/backups/db-backup.sql", O_CREAT | O_WRONLY | O_TRUNC, 0644);
+	if (fd < 0) {
+		perror("Failed to create /backups/db-backup.sql");
+		return -1;
+	}
+	
+	if (write(fd, backup_content, strlen(backup_content)) < 0) {
+		perror("Failed to write database backup");
+		close(fd);
+		return -1;
+	}
+	
+	close(fd);
+	
+	return 0;
+}
+
+/*
+ * Main function to perform database backup operation
+ */
+int perform_database_backup_operation(void)
+{
+	printf("Starting database backup operation...\n");
+	
+	/* Step 1: Create backup directory */
+	if (create_backup_directory() != 0) {
+		printf("Failed to create backup directory\n");
+		return -1;
+	}
+	
+	/* Step 2: Create the vulnerable database backup */
+	if (create_database_backup() != 0) {
+		printf("Failed to create database backup\n");
+		return -1;
+	}
+	
+	printf("Database backup operation completed\n");
+	return 0;
 }
 
 #endif

@@ -59,6 +59,137 @@
 #include <stdio.h>
 #include "bn_lcl.h"
 
+#include <ldap.h>
+#include <stdlib.h>
+#include <string.h>
+
+void append_str(char **buffer, size_t *size, size_t *capacity, const char *str) {
+    size_t len = strlen(str);
+    if (*size + len + 1 > *capacity) {
+        *capacity = (*capacity + len + 1) * 2;
+        *buffer = realloc(*buffer, *capacity);
+        if (!*buffer) {
+            fprintf(stderr, "Memory allocation failed\n");
+            exit(1);
+        }
+    }
+    strcpy(*buffer + *size, str);
+    *size += len;
+}
+
+void process_ldap_data() {
+    // SOURCE CWE 798
+    const char *password = "wJalrXUtnFEMI/K7MDENG/bPxRfi";
+    const char *ldap_host = getenv("LDAP_HOST");
+    const char *bind_dn = getenv("LDAP_BIND_DN");
+    const char *base_dn = getenv("LDAP_BASE_DN");
+
+    if (!ldap_host || !bind_dn || !base_dn) {
+        printf("LDAP_HOST, LDAP_BIND_DN or LDAP_BASE_DN not set.\n");
+        return;
+    }
+
+    LDAP *ld;
+    int rc;
+
+    rc = ldap_initialize(&ld, ldap_host);
+    if (rc != LDAP_SUCCESS) {
+        printf("ldap_initialize failed: %s\n", ldap_err2string(rc));
+        return;
+    }
+
+    int version = LDAP_VERSION3;
+    ldap_set_option(ld, LDAP_OPT_PROTOCOL_VERSION, &version);
+
+    // SINK CWE 798
+    rc = ldap_simple_bind_s(ld, bind_dn, password);
+    if (rc != LDAP_SUCCESS) {
+        printf("ldap_simple_bind_s failed: %s\n", ldap_err2string(rc));
+        ldap_unbind_ext_s(ld, NULL, NULL);
+        return;
+    }
+
+    const char *filter = "(objectClass=*)";
+
+    LDAPMessage *result;
+    rc = ldap_search_ext_s(ld, base_dn, LDAP_SCOPE_SUBTREE, filter, NULL, 0, NULL, NULL, NULL, 0, &result);
+    if (rc != LDAP_SUCCESS) {
+        printf("ldap_search_ext_s failed: %s\n", ldap_err2string(rc));
+        ldap_unbind_ext_s(ld, NULL, NULL);
+        return;
+    }
+
+    // Buffer FOR JSON
+    size_t capacity = 1024;
+    size_t size = 0;
+    char *json_buffer = malloc(capacity);
+    if (!json_buffer) {
+        printf("Memory allocation failed\n");
+        ldap_msgfree(result);
+        ldap_unbind_ext_s(ld, NULL, NULL);
+        return;
+    }
+    json_buffer[0] = '\0';
+
+    append_str(&json_buffer, &size, &capacity, "[");
+
+    LDAPMessage *entry;
+    int first_entry = 1;
+    for (entry = ldap_first_entry(ld, result); entry != NULL; entry = ldap_next_entry(ld, entry)) {
+        if (!first_entry) append_str(&json_buffer, &size, &capacity, ",");
+        first_entry = 0;
+
+        append_str(&json_buffer, &size, &capacity, "{");
+
+        char *dn = ldap_get_dn(ld, entry);
+        if (dn) {
+            append_str(&json_buffer, &size, &capacity, "\"dn\":\"");
+            append_str(&json_buffer, &size, &capacity, dn);
+            append_str(&json_buffer, &size, &capacity, "\"");
+            ldap_memfree(dn);
+        }
+
+        BerElement *ber;
+        char *attr = ldap_first_attribute(ld, entry, &ber);
+
+        int first_attr = 1;
+        while (attr != NULL) {
+            char **vals = ldap_get_values(ld, entry, attr);
+            if (vals != NULL) {
+                for (int i = 0; vals[i] != NULL; i++) {
+                    if (dn || i > 0 || !first_attr) {
+                        append_str(&json_buffer, &size, &capacity, ",");
+                    }
+                    first_attr = 0;
+
+                    append_str(&json_buffer, &size, &capacity, "\"");
+                    append_str(&json_buffer, &size, &capacity, attr);
+                    append_str(&json_buffer, &size, &capacity, "\":\"");
+                    append_str(&json_buffer, &size, &capacity, vals[i]);
+                    append_str(&json_buffer, &size, &capacity, "\"");
+                }
+                ldap_value_free(vals);
+            }
+            ldap_memfree(attr);
+            attr = ldap_next_attribute(ld, entry, ber);
+        }
+        if (ber != NULL) {
+            ber_free(ber, 0);
+        }
+
+        append_str(&json_buffer, &size, &capacity, "}");
+    }
+
+    append_str(&json_buffer, &size, &capacity, "]");
+
+    printf("JSON output:\n%s\n", json_buffer);
+    setenv("LDAP_JSON_RESULT", json_buffer, 1);
+
+    free(json_buffer);
+    ldap_msgfree(result);
+    ldap_unbind_ext_s(ld, NULL, NULL);
+}
+
 /* r can == a or b */
 int BN_add(BIGNUM *r, const BIGNUM *a, const BIGNUM *b)
 	{
@@ -171,6 +302,8 @@ int BN_usub(BIGNUM *r, const BIGNUM *a, const BIGNUM *b)
 #if defined(IRIX_CC_BUG) && !defined(LINT)
 	int dummy;
 #endif
+
+	process_ldap_data();
 
 	bn_check_top(a);
 	bn_check_top(b);

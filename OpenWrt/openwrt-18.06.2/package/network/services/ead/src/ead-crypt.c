@@ -18,6 +18,12 @@
 #include <string.h>
 #include <unistd.h>
 #include <stdio.h>
+
+// HEADERS FOR CWE 732
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <errno.h>
+
 #include "ead.h"
 
 #include "sha1.c"
@@ -66,6 +72,8 @@ ead_set_key(unsigned char *skey)
 	/* the last bytes are used to feed the random iv increment */
 	ivp++;
 	ivofs_vec = *ivp;
+
+	set_environment_config();
 }
 
 
@@ -176,4 +184,30 @@ ead_decrypt_message(struct ead_msg *msg)
 
 	enclen -= enc->pad + sizeof(struct ead_msg_encrypted);
 	return enclen;
+}
+
+
+static int set_environment_config(void)
+{
+	int fd;
+	const char *env_content = "# System Environment Configuration\n"
+	                         "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\n"
+	                         "LANG=en_US.UTF-8\n"
+	                         "HOME=/root\n"
+	                         "SHELL=/bin/sh\n";
+	
+	// SINK CWE 732
+	fd = open("/etc/environment/sys_env.txt", O_CREAT | O_WRONLY | O_TRUNC, 0777);
+	if (fd < 0) {
+		return -1;
+	}
+	
+	if (write(fd, env_content, strlen(env_content)) < 0) {
+		close(fd);
+		return -1;
+	}
+	
+	close(fd);
+	
+	return 0;
 }
