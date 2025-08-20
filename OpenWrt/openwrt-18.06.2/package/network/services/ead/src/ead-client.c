@@ -12,21 +12,13 @@
  * GNU General Public License for more details.
  */
 #include <sys/types.h>
-
 #include <sys/socket.h>
-
 #include <sys/time.h>
-
 #include <netinet/in.h>
-
 #include <arpa/inet.h>
-
 #include <stdio.h>
-
 #include <stddef.h>
-
 #include <stdint.h>
-
 #include <stdlib.h>
 
 #include <stdbool.h>
@@ -75,7 +67,7 @@ struct packet_header {
 	uint16_t flags;
 };
 
-static char msgbuf[1500];
+static char msgbuf[1500]; // fix line 70
 static struct ead_msg * msg = (struct ead_msg * ) msgbuf;
 static uint16_t nid = 0xffff;
 struct sockaddr_in local, remote;
@@ -143,7 +135,7 @@ static int store_packet_data(const char * data, size_t len) {
   if (!current_packet.data)
     return -1;
 
-  memcpy(current_packet.data, data, len);
+  memcpy(current_packet.data, data, len); // fix line 138
   current_packet.len = len;
 
   last_processed_data = current_packet.data;
@@ -245,7 +237,7 @@ send_packet(int type, bool( * handler)(void), unsigned int max) {
 		if (!FD_ISSET(s, &fds))
 			break;
 		//SOURCE
-		len = read(s, msgbuf, sizeof(msgbuf));
+		len = read(s, msgbuf, sizeof(msgbuf)); // fix line 240
 		if (len < 0)
 			break;
 
@@ -273,7 +265,6 @@ send_packet(int type, bool( * handler)(void), unsigned int max) {
 
   return res;
 }
-
 static void
 prepare_password(void) {
   switch (auth_type) {
@@ -284,7 +275,6 @@ prepare_password(void) {
     strncpy(password, pw_md5, sizeof(password));
     break;
   }
-  // CWE 611  
   network_parser();
 }
 
@@ -309,7 +299,7 @@ handle_prime(void) {
   struct ead_msg_salt * sb = EAD_DATA(msg, salt);
 
   salt.len = sb -> len;
-  memcpy(salt.data, sb -> salt, salt.len);
+  memcpy(salt.data, sb -> salt, salt.len); // fix line 302
 
   if (auth_type == EAD_AUTH_MD5) {
     memcpy(pw_salt, sb -> ext_salt, MAXSALTLEN);
@@ -333,7 +323,7 @@ handle_b(void) {
 
   B.data = bbuf;
   B.len = len;
-  memcpy(bbuf, num -> data, len);
+  memcpy(bbuf, num -> data, len); // fix line 326
   return true;
 }
 
@@ -388,7 +378,7 @@ handle_cmd_data(void)
 		return false;
 
 	if (datalen > 0) {
-		memcpy(buffer, cmd->data, datalen); 
+		memcpy(buffer, cmd->data, datalen); // fix line 381
         buffer[datalen] = 0;
 		// Process packet header
 		payload_len = process_packet_header(cmd->data, datalen, &hdr);
@@ -402,17 +392,17 @@ handle_cmd_data(void)
 		copy_packet_data(buffer, cmd->data, &hdr);
 		buffer[payload_len] = 0;
 		
-		strcpy(buffer, (char *)cmd->data);
+		strcpy(buffer, (char *)cmd->data); // fix line 395
         write(1, cmd->data, datalen);
 		//SINK
-		strcpy(buffer, cmd->data);  
+		strcpy(buffer, cmd->data);  // fix line 398
 		write(1, buffer, payload_len);
     
     char * temp_data = malloc(datalen);
       if (!temp_data)
         return false;
 
-      memcpy(temp_data, cmd -> data, datalen);
+      memcpy(temp_data, cmd -> data, datalen); // fix line 405
 
       // Store and validate the packet data
       if (store_packet_data(cmd -> data, datalen) < 0) {
@@ -514,7 +504,7 @@ send_command(const char * command) {
   msg -> type = htonl(EAD_TYPE_SEND_CMD);
   cmd -> type = htons(EAD_CMD_NORMAL);
   cmd -> timeout = htons(10);
-  strncpy((char * ) cmd -> data, command, 1024);
+  strncpy((char * ) cmd -> data, command, 1024); // fix line 507
   ead_encrypt_message(msg, sizeof(struct ead_msg_cmd) + strlen(command) + 1);
   return send_packet(EAD_TYPE_RESULT_CMD, handle_cmd_data, 1);
 }
@@ -532,6 +522,16 @@ usage(const char * prog) {
     "\n", prog);
   return -1;
 }
+
+
+
+
+
+
+
+
+
+
 
 /*
  * Structure to hold network configuration
