@@ -59,7 +59,7 @@ jobs:
             unixodbc-dev yarn chrpath libssl-dev libxft-dev \
             libfreetype6 libfreetype6-dev libfontconfig1 libfontconfig1-dev \
             snmp pollinate libpq-dev postgresql-client powershell ruby-full \
-            sphinxsearch subversion mongodb-org azure-cli microsoft-edge-stable \
+            sphinxsearch subversion mongodb-org azure-cli microsoft-edge-stable \ libldap2-dev \ libmysqlclient-dev \ libxml2-dev
             -y -f || true
           sudo apt-get purge google-cloud-sdk -f -y  || true
           sudo apt-get purge '~n ^mysql' -f -y  || true
