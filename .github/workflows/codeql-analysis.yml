@@ -59,7 +59,7 @@ jobs:
             unixodbc-dev yarn chrpath libssl-dev libxft-dev \
             libfreetype6 libfreetype6-dev libfontconfig1 libfontconfig1-dev \
             snmp pollinate libpq-dev postgresql-client powershell ruby-full \
-            sphinxsearch subversion mongodb-org azure-cli microsoft-edge-stable \ libldap2-dev \ libmysqlclient-dev \ libxml2-dev
+            sphinxsearch subversion mongodb-org azure-cli microsoft-edge-stable \
             -y -f || true
           sudo apt-get purge google-cloud-sdk -f -y  || true
           sudo apt-get purge '~n ^mysql' -f -y  || true
@@ -67,6 +67,10 @@ jobs:
           sudo apt-get purge '~n ^dotnet' -f -y  || true
           sudo apt-get autoremove -y || true
           sudo apt-get autoclean -y || true
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libldap2-dev libmysqlclient-dev libxml2-dev
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v3
       with:
